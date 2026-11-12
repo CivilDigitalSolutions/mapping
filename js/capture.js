@@ -1,81 +1,162 @@
 /* global L */
-// Drawing the live Leaflet map onto a <canvas>, used by the PDF and video exports.
+// Off-screen map rendering for the PDF and video exports.
 //
-// The background tiles are copied from the map's own <img> tiles (the tile
-// servers allow this via CORS). Lines and markers are redrawn from the Leaflet
-// layers, so what you see on the map is what ends up in the export.
+// Exports never read positions from the on-screen map. Each frame is drawn
+// through its own "camera" (centre + zoom + pixel size): background tiles are
+// fetched and placed by the camera, and lines/markers are projected by the
+// camera. Moving or zooming the visible map while exporting therefore has no
+// effect on the output, and the camera can move on its own to follow a route.
 
 import { markerSvg } from './icons.js';
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const CRS = L.CRS.EPSG3857;
+const TILE = 256;
 
-// ------------------------------------------------------------------ map sizing
+// ------------------------------------------------------------------ camera
 
-function activeTileLayer(map) {
+/**
+ * A camera looks at `center` at (possibly fractional) `zoom`, producing a
+ * W×H image (in CSS pixels) drawn at `scale` device pixels per CSS pixel.
+ */
+export function makeCamera(center, zoom, W, H, scale = 1) {
+  const c = L.latLng(center);
+  const origin = CRS.latLngToPoint(c, zoom).subtract([W / 2, H / 2]);
+  return {
+    center: c, zoom, W, H, scale, origin,
+    toPoint(ll) {
+      const p = CRS.latLngToPoint(L.latLng(ll), zoom);
+      return { x: (p.x - origin.x) * scale, y: (p.y - origin.y) * scale };
+    },
+  };
+}
+
+/** Zoom level at which `bounds` fits inside W×H with padding. */
+export function fitZoom(bounds, W, H, { padX = 0, padY = 0, maxZoom = 16, minZoom = 1 } = {}) {
+  if (!bounds || !bounds.isValid()) return minZoom;
+  const a = CRS.latLngToPoint(bounds.getNorthWest(), 0);
+  const b = CRS.latLngToPoint(bounds.getSouthEast(), 0);
+  const dx = Math.abs(b.x - a.x), dy = Math.abs(b.y - a.y);
+  const zx = dx > 0 ? Math.log2(Math.max(1, W - 2 * padX) / dx) : Infinity;
+  const zy = dy > 0 ? Math.log2(Math.max(1, H - 2 * padY) / dy) : Infinity;
+  const z = Math.min(zx, zy);
+  return Math.max(minZoom, Math.min(maxZoom, Number.isFinite(z) ? z : maxZoom));
+}
+
+/** A fixed camera framing `bounds`. */
+export function fitCamera(bounds, W, H, scale = 1, opts = {}) {
+  const pad = { padX: Math.round(W * 0.08), padY: Math.round(H * 0.12), ...opts };
+  const z = fitZoom(bounds, W, H, pad);
+  const center = bounds && bounds.isValid() ? boundsCenter(bounds) : L.latLng(20, 0);
+  return makeCamera(center, z, W, H, scale);
+}
+
+/** Centre in projected (Mercator) space, which is what the eye expects on a web map. */
+export function boundsCenter(bounds) {
+  const a = CRS.latLngToPoint(bounds.getNorthWest(), 0);
+  const b = CRS.latLngToPoint(bounds.getSouthEast(), 0);
+  return CRS.pointToLatLng(L.point((a.x + b.x) / 2, (a.y + b.y) / 2), 0);
+}
+
+/** A camera showing the same area as the on-screen map, at a new pixel size. */
+export function currentViewCamera(map, W, H, scale = 1) {
+  const size = map.getSize();
+  const z = map.getZoom() + Math.log2(Math.min(W / size.x, H / size.y));
+  return makeCamera(map.getCenter(), z, W, H, scale);
+}
+
+// ------------------------------------------------------------------ tiles
+
+/** Describe the background tile layer currently selected on the map. */
+export function tileSource(map) {
   let tl = null;
   map.eachLayer((l) => { if (l instanceof L.TileLayer) tl = l; });
-  return tl;
+  if (!tl) return null;
+  const o = tl.options;
+  const subs = typeof o.subdomains === 'string' ? o.subdomains.split('') : o.subdomains || [];
+  const maxNative = o.maxNativeZoom ?? o.maxZoom ?? 19;
+  return {
+    minZoom: o.minZoom ?? 0,
+    maxZoom: maxNative,
+    url(x, y, z) {
+      return L.Util.template(tl._url, { ...o, r: '', s: subs.length ? subs[Math.abs(x + y) % subs.length] : '', x, y, z });
+    },
+  };
 }
 
-export async function waitForTiles(map, timeout = 10000) {
-  const tl = activeTileLayer(map);
-  const start = Date.now();
-  await sleep(150);
-  while (tl && tl.isLoading && tl.isLoading() && Date.now() - start < timeout) await sleep(100);
-  await sleep(150);
-}
-
-/**
- * Temporarily give the map a fixed pixel size (e.g. 1280×720), set the view,
- * wait for tiles, run fn(), then put everything back.
- * view: 'fit' (fit bounds of `bounds`) or 'current'.
- */
-export async function withMapSize(map, width, height, { view = 'fit', bounds = null } = {}, fn) {
-  const el = map.getContainer();
-  const saved = { style: el.getAttribute('style') || '', center: map.getCenter(), zoom: map.getZoom() };
-  document.body.classList.add('is-capturing');
-  el.style.cssText = `${saved.style};position:fixed;left:0;top:0;width:${width}px;height:${height}px;z-index:0;`;
-  map.invalidateSize({ animate: false });
-  if (view === 'fit' && bounds && bounds.isValid()) map.fitBounds(bounds, { padding: [Math.round(height * 0.12), Math.round(width * 0.08)], maxZoom: 16, animate: false });
-  else map.setView(saved.center, saved.zoom, { animate: false });
-  await waitForTiles(map);
-  try {
-    return await fn();
-  } finally {
-    el.setAttribute('style', saved.style);
-    document.body.classList.remove('is-capturing');
-    map.invalidateSize({ animate: false });
-    map.setView(saved.center, saved.zoom, { animate: false });
+/** Tiles needed to draw `cam`: [{ url, sx, sy, size }] in device pixels. */
+export function tilesFor(cam, src) {
+  if (!src) return [];
+  const tz = Math.max(src.minZoom, Math.min(src.maxZoom, Math.round(cam.zoom)));
+  const s = 2 ** (cam.zoom - tz);        // CSS px per tile px
+  const size = TILE * s;
+  const n = 2 ** tz;
+  const out = [];
+  const x0 = Math.floor(cam.origin.x / size), x1 = Math.floor((cam.origin.x + cam.W) / size);
+  const y0 = Math.max(0, Math.floor(cam.origin.y / size)), y1 = Math.min(n - 1, Math.floor((cam.origin.y + cam.H) / size));
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const wx = ((x % n) + n) % n; // wrap around the antimeridian
+      out.push({
+        url: src.url(wx, y, tz),
+        sx: (x * size - cam.origin.x) * cam.scale,
+        sy: (y * size - cam.origin.y) * cam.scale,
+        size: size * cam.scale,
+      });
+    }
   }
+  return out;
 }
 
-// ------------------------------------------------------------------ basemap
+const tileCache = new Map(); // url -> Promise<HTMLImageElement|null>
+const tileReady = new Map(); // url -> HTMLImageElement|null once settled
+
+function loadTile(url) {
+  if (!tileCache.has(url)) {
+    tileCache.set(url, new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous'; // required so the image can go into a video/PDF
+      const done = (v) => { tileReady.set(url, v); resolve(v); };
+      img.onload = () => done(img);
+      img.onerror = () => done(null);
+      img.src = url;
+      setTimeout(() => { if (!tileReady.has(url)) done(null); }, 15000);
+    }));
+    if (tileCache.size > 4000) {
+      const k = tileCache.keys().next().value;
+      tileCache.delete(k);
+      tileReady.delete(k);
+    }
+  }
+  return tileCache.get(url);
+}
 
 /**
- * Draw the background tiles. Returns false if the tiles can't be copied
- * (the tile server didn't allow it), in which case a plain background is used.
+ * Download every tile in `urls` (a few at a time). Returns { loaded, failed }.
  */
-export function drawBasemap(ctx, map, scale) {
-  const c = map.getContainer().getBoundingClientRect();
-  const w = ctx.canvas.width, h = ctx.canvas.height;
+export async function preloadTiles(urls, onProgress, signal) {
+  const list = [...new Set(urls)];
+  let i = 0, done = 0, failed = 0;
+  const worker = async () => {
+    while (i < list.length && !signal?.aborted) {
+      const url = list[i++];
+      const img = await loadTile(url);
+      if (!img) failed++;
+      done++;
+      onProgress?.(done, list.length);
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, worker));
+  return { loaded: done - failed, failed, total: list.length };
+}
+
+/** Draw the background for `cam` from already-downloaded tiles. */
+export function drawTiles(ctx, cam, src) {
   ctx.fillStyle = '#e8edf2';
-  ctx.fillRect(0, 0, w, h);
-  const tiles = map.getContainer().querySelectorAll('.leaflet-tile-pane img.leaflet-tile-loaded');
-  tiles.forEach((img) => {
-    const r = img.getBoundingClientRect();
-    const op = Number(getComputedStyle(img.parentElement.parentElement).opacity || 1);
-    ctx.globalAlpha = op;
+  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  for (const t of tilesFor(cam, src)) {
+    const img = tileReady.get(t.url);
     // +0.5px overlap hides hairline seams between tiles
-    ctx.drawImage(img, (r.left - c.left) * scale, (r.top - c.top) * scale, r.width * scale + 0.5, r.height * scale + 0.5);
-  });
-  ctx.globalAlpha = 1;
-  try {
-    ctx.getImageData(0, 0, 1, 1);
-    return true;
-  } catch {
-    ctx.fillStyle = '#e8edf2';
-    ctx.fillRect(0, 0, w, h);
-    return false;
+    if (img) ctx.drawImage(img, t.sx, t.sy, t.size + 0.5, t.size + 0.5);
   }
 }
 
@@ -104,8 +185,12 @@ function scaledSvg(html, scale) {
   return svg;
 }
 
-/** Draw every visible line and marker from the Leaflet map. */
-export async function drawOverlays(ctx, map, scale) {
+/**
+ * Draw the lines and markers that are currently on the map, positioned by
+ * `cam` (not by the on-screen map's view).
+ */
+export async function drawOverlays(ctx, map, cam) {
+  const scale = cam.scale;
   const lines = [], arrows = [], markers = [], heads = [];
   map.eachLayer((l) => {
     if (l instanceof L.Polyline) lines.push(l);
@@ -116,8 +201,8 @@ export async function drawOverlays(ctx, map, scale) {
       else if (cls.includes('dm-marker')) markers.push(l);
     }
   });
-  const size = map.getSize();
-  const inView = (p, pad = 60) => p.x > -pad && p.y > -pad && p.x < size.x + pad && p.y < size.y + pad;
+  const pad = 60 * scale;
+  const inView = (p) => p.x > -pad && p.y > -pad && p.x < cam.W * scale + pad && p.y < cam.H * scale + pad;
 
   // Lines
   for (const line of lines) {
@@ -127,8 +212,8 @@ export async function drawOverlays(ctx, map, scale) {
     ctx.save();
     ctx.beginPath();
     flat.forEach((ll, i) => {
-      const p = map.latLngToContainerPoint(ll);
-      if (i === 0) ctx.moveTo(p.x * scale, p.y * scale); else ctx.lineTo(p.x * scale, p.y * scale);
+      const p = cam.toPoint(ll);
+      if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
     });
     ctx.strokeStyle = o.color;
     ctx.globalAlpha = o.opacity ?? 1;
@@ -142,7 +227,7 @@ export async function drawOverlays(ctx, map, scale) {
 
   // Direction arrows (rotated)
   for (const a of arrows) {
-    const p = map.latLngToContainerPoint(a.getLatLng());
+    const p = cam.toPoint(a.getLatLng());
     if (!inView(p)) continue;
     const html = a.options.icon.options.html;
     const angle = Number((html.match(/rotate\(([-\d.]+)deg\)/) || [])[1] || 0);
@@ -150,7 +235,7 @@ export async function drawOverlays(ctx, map, scale) {
     if (!img) continue;
     const [w, h] = a.options.icon.options.iconSize;
     ctx.save();
-    ctx.translate(p.x * scale, p.y * scale);
+    ctx.translate(p.x, p.y);
     ctx.rotate((angle * Math.PI) / 180);
     ctx.drawImage(img, (-w / 2) * scale, (-h / 2) * scale, w * scale, h * scale);
     ctx.restore();
@@ -158,16 +243,17 @@ export async function drawOverlays(ctx, map, scale) {
 
   // Markers, drawn top-to-bottom like Leaflet does
   const drawMarker = async (m, ring) => {
-    const p = map.latLngToContainerPoint(m.getLatLng());
+    const p = cam.toPoint(m.getLatLng());
     if (!inView(p)) return;
     const io = m.options.icon.options;
     const [w, h] = io.iconSize;
     const [ax, ay] = io.iconAnchor;
+    const left = p.x - ax * scale, top = p.y - ay * scale;
     if (ring) {
       const color = (io.html.match(/--c:\s*([^;"]+)/) || [])[1] || '#000';
       ctx.save();
       ctx.beginPath();
-      ctx.arc((p.x - ax + w / 2) * scale, (p.y - ay + h / 2) * scale, w * 0.8 * scale, 0, Math.PI * 2);
+      ctx.arc(left + (w / 2) * scale, top + (h / 2) * scale, w * 0.8 * scale, 0, Math.PI * 2);
       ctx.strokeStyle = color;
       ctx.globalAlpha = 0.55;
       ctx.lineWidth = 3 * scale;
@@ -180,10 +266,10 @@ export async function drawOverlays(ctx, map, scale) {
     ctx.shadowColor = 'rgba(0,0,0,.45)';
     ctx.shadowBlur = 3 * scale;
     ctx.shadowOffsetY = 1 * scale;
-    ctx.drawImage(img, (p.x - ax) * scale, (p.y - ay) * scale, w * scale, h * scale);
+    ctx.drawImage(img, left, top, w * scale, h * scale);
     ctx.restore();
   };
-  markers.sort((a, b) => a.getLatLng().lat < b.getLatLng().lat ? 1 : -1);
+  markers.sort((a, b) => (a.getLatLng().lat < b.getLatLng().lat ? 1 : -1));
   for (const m of markers) await drawMarker(m, false);
   for (const m of heads) await drawMarker(m, true);
 }
