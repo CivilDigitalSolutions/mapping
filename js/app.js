@@ -6,6 +6,7 @@ import { formatDateTime, formatDuration, formatDistance } from './dates.js';
 import { distanceMetres, bearing, formatCoord } from './coords.js';
 import * as store from './store.js';
 import { SAMPLES } from './samples.js';
+import { createReplay } from './replay.js';
 
 // ===================================================================== state
 
@@ -59,6 +60,8 @@ function save() {
   saveTimer = setTimeout(() => store.set('datasets', datasets), 300);
 }
 function savePrefs() { store.set('prefs', prefs); }
+
+const replay = createReplay({ map, getDatasets: () => datasets, layers, announce });
 
 function download(filename, text, type) {
   const blob = new Blob([text], { type });
@@ -169,7 +172,7 @@ function renderDataset(ds) {
   });
 
   layers.set(ds.id, { group, markers, order, untimed });
-  if (ds.visible) group.addTo(map);
+  if (ds.visible && !replay.active) group.addTo(map);
 }
 
 function removeLayers(id) {
@@ -229,6 +232,7 @@ function focusPoint(dsId, index, keepZoom = false) {
   const l = layers.get(dsId);
   const ds = datasets.find((d) => d.id === dsId);
   if (!l || !ds) return;
+  if (replay.active) replay.close();
   if (!ds.visible) { ds.visible = true; l.group.addTo(map); renderList(); save(); }
   const m = l.markers.get(index);
   if (!m) return;
@@ -327,7 +331,8 @@ function renderList() {
         ds.visible = e.target.checked;
         li.classList.toggle('is-hidden', !ds.visible);
         const g = layers.get(ds.id)?.group;
-        if (g) ds.visible ? g.addTo(map) : map.removeLayer(g);
+        if (replay.active) replay.refresh();
+        else if (g) ds.visible ? g.addTo(map) : map.removeLayer(g);
         announce(`${ds.name} ${ds.visible ? 'shown' : 'hidden'}`);
         save();
       }
@@ -344,6 +349,7 @@ function renderList() {
     });
     list.appendChild(li);
   });
+  replay.refresh();
 }
 
 async function removeDataset(ds) {
@@ -466,7 +472,7 @@ function openSettings(ds) {
   let pending = 0;
   renderStyleControls($('#set-style'), ds.style, () => {
     cancelAnimationFrame(pending);
-    pending = requestAnimationFrame(() => { renderDataset(ds); });
+    pending = requestAnimationFrame(() => { renderDataset(ds); replay.refresh(); });
   }, 'set');
   dlg.onclose = () => { renderDataset(ds); renderList(); save(); };
   dlg.showModal();

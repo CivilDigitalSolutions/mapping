@@ -13,6 +13,7 @@ A progressive web app (PWA) for putting coordinate data on a map. Upload CSV fil
 - **Per-dataset styling:** 9 marker shapes (circle, square, triangle, diamond, star, hexagon, cross, waypoint pin, flag), a colour-blind-friendly palette or any custom colour, and marker size.
 - **Time-ordered tracks:** points are joined by date/time (or file order) with solid, dashed or dotted lines, direction arrows and optional sequence numbers on the markers.
 - **Point details:** date and time, coordinates (with a copy button), and the distance and time since the previous point, plus every other column from the row. *Previous* and *Next* buttons step along the track.
+- **Route replay:** a time slider plays the routes back. You can scrub to any moment, step from point to point, pick the speed (whole route in 15 s to 2 min, real time, or 1 min/10 min/1 hour/1 day per second), keep the whole trail or only the last 15 minutes, hour or day, and have the map follow the moving markers. Space plays and pauses, and Esc closes the replay.
 - **Table view** for each dataset, as an accessible alternative to the map. **Export** each dataset as GeoJSON or CSV.
 - **Private:** data stays in the browser (IndexedDB) and survives reloads. Nothing is uploaded to a server.
 - **Works offline** once installed. Map tiles you've already viewed are cached.
@@ -28,6 +29,18 @@ npm start            # or: python3 -m http.server 8080
 ```
 
 > Opening `index.html` directly from disk (`file://`) won't work. Browsers only allow ES modules and service workers over http(s), or on `localhost`.
+
+### Publishing on GitHub Pages
+
+`.github/workflows/pages.yml` runs the tests and publishes the site on every push to `main` (or the development branch). You can also run it by hand from the **Actions** tab. To turn it on, do this once:
+
+1. In the repository, go to **Settings → Pages**.
+2. Under **Build and deployment → Source**, choose **GitHub Actions**.
+3. Go to **Actions → Deploy to GitHub Pages → Run workflow**, or push a commit.
+
+The app will be at `https://<org>.github.io/<repo>/`.
+
+> GitHub Pages for a **private** repository needs a paid GitHub plan (Team or Enterprise). On those plans the published site is still public unless you have Enterprise Cloud with private Pages. Your data is never part of the site, though, because it stays in each user's browser.
 
 ### Hosting for your organisation
 

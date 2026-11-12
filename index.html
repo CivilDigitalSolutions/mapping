@@ -21,15 +21,19 @@
       <h1>Data Mapper</h1>
     </div>
     <nav class="top-actions" aria-label="Main actions">
-      <button type="button" class="btn btn-primary" id="btn-add">
+      <button type="button" class="btn btn-primary" id="btn-add" aria-label="Add data">
         <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" fill="none"/></svg>
-        <span>Add data</span>
+        <span class="hide-xs">Add data</span>
       </button>
-      <button type="button" class="btn" id="btn-fit" title="Zoom the map to show all visible data">
+      <button type="button" class="btn" id="btn-replay" aria-label="Replay" aria-pressed="false" aria-controls="replay-bar" disabled title="Replay routes over time">
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" fill="none"/><path d="M12 7v5l3 2" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+        <span class="hide-sm">Replay</span>
+      </button>
+      <button type="button" class="btn" id="btn-fit" aria-label="Fit all" title="Zoom the map to show all visible data">
         <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
         <span class="hide-sm">Fit all</span>
       </button>
-      <button type="button" class="btn" id="btn-help">
+      <button type="button" class="btn" id="btn-help" aria-label="Help">
         <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" fill="none"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.7M12 17h.01" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
         <span class="hide-sm">Help</span>
       </button>
@@ -56,6 +60,54 @@
     </aside>
 
     <div id="map" class="map" role="region" aria-label="Map. Use arrow keys to pan and plus or minus to zoom. Press Tab to move between markers."></div>
+
+    <section id="replay-bar" class="replay-bar" aria-label="Route replay" hidden>
+      <div class="rp-controls">
+        <button type="button" class="icon-btn rp-btn" id="rp-prev" aria-label="Previous point in time">
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20"><path d="M6 5v14M18 6l-9 6 9 6z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        </button>
+        <button type="button" class="rp-play" id="rp-play" aria-label="Play">
+          <svg class="rp-icon-play" aria-hidden="true" viewBox="0 0 24 24" width="22" height="22"><path d="M8 5l11 7-11 7z" fill="currentColor"/></svg>
+          <svg class="rp-icon-pause" aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" hidden><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="currentColor"/></svg>
+        </button>
+        <button type="button" class="icon-btn rp-btn" id="rp-next" aria-label="Next point in time">
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20"><path d="M18 5v14M6 6l9 6-9 6z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="rp-time-wrap">
+          <output id="rp-time" class="rp-time" for="rp-slider"></output>
+        </div>
+        <button type="button" class="icon-btn rp-close" id="rp-close" aria-label="Close replay and show all points">✕</button>
+      </div>
+      <div class="rp-track">
+        <label for="rp-slider" class="sr-only">Replay time</label>
+        <input type="range" id="rp-slider" min="0" max="1000" step="1" value="0">
+        <div class="rp-ends" aria-hidden="true"><span id="rp-start"></span><span id="rp-end"></span></div>
+      </div>
+      <div class="rp-options">
+        <label>Speed
+          <select id="rp-speed">
+            <option value="auto:15">Whole route in 15 s</option>
+            <option value="auto:30" selected>Whole route in 30 s</option>
+            <option value="auto:60">Whole route in 1 min</option>
+            <option value="auto:120">Whole route in 2 min</option>
+            <option value="1000">Real time</option>
+            <option value="60000">1 minute per second</option>
+            <option value="600000">10 minutes per second</option>
+            <option value="3600000">1 hour per second</option>
+            <option value="86400000">1 day per second</option>
+          </select>
+        </label>
+        <label>Show
+          <select id="rp-trail">
+            <option value="all" selected>Whole route so far</option>
+            <option value="1440">Last 24 hours</option>
+            <option value="60">Last hour</option>
+            <option value="15">Last 15 minutes</option>
+          </select>
+        </label>
+        <label class="rp-check"><input type="checkbox" id="rp-follow" checked> Follow on map</label>
+      </div>
+    </section>
   </main>
 
   <div id="live" class="sr-only" role="status" aria-live="polite"></div>
@@ -223,6 +275,7 @@
           <li><strong>Check the columns:</strong> the app guesses which columns are latitude, longitude, date and time. Change any guess that looks wrong. The preview shows what will be mapped.</li>
           <li><strong>Pick a marker:</strong> give each dataset its own shape (circle, square, triangle, waypoint pin, flag and others) and colour so you can tell them apart.</li>
           <li><strong>Follow the path:</strong> when points have dates and times, they're joined in time order with a line. Arrows show the direction of travel. You can turn this off in the dataset's settings.</li>
+          <li><strong>Replay:</strong> press <em>Replay</em> to play the routes back over time. Drag the slider to any moment, use the step buttons to jump from point to point, and choose the speed and how much of the trail stays visible.</li>
           <li><strong>Inspect:</strong> select any marker to see its date, time, distance and time since the previous point, and its other columns.</li>
         </ol>
         <h3>Coordinate formats understood</h3>
