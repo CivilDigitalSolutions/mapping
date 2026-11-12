@@ -428,3 +428,26 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--brand); width:
   .rp-options { gap: .4rem .75rem; }
   .rp-options select { max-width: 52vw; }
 }
+
+/* ------------------------------------------------------------------ export */
+.choice-cards { border: 0; padding: 0; margin: 0 0 1rem; display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+.choice-cards legend { margin-bottom: .4rem; }
+.choice-card {
+  position: relative; display: flex; flex-direction: column; gap: .2rem;
+  padding: .75rem .85rem .75rem 2.4rem; border: 2px solid var(--line); border-radius: var(--radius); cursor: pointer;
+}
+.choice-card input { position: absolute; left: .8rem; top: .9rem; }
+.choice-card:has(input:checked) { border-color: var(--brand); background: var(--brand-soft); }
+.choice-card:has(input:disabled) { opacity: .55; cursor: not-allowed; }
+.choice-title { font-weight: 700; }
+.choice-desc { font-size: .86rem; color: var(--ink-2); }
+textarea.plain { font-family: inherit; font-size: inherit; }
+.export-progress { display: flex; flex-direction: column; gap: .35rem; padding: .75rem; background: var(--surface-2); border-radius: 8px; }
+.export-progress progress { width: 100%; height: 12px; accent-color: var(--brand); }
+.rp-video { flex: none; }
+/* While capturing, the map is temporarily resized behind the dialog */
+body.is-capturing .replay-bar { visibility: hidden; }
+@media (max-width: 760px) {
+  .choice-cards { grid-template-columns: 1fr; }
+  .rp-video span { display: none; }
+}

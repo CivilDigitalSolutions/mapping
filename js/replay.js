@@ -326,7 +326,13 @@ export function createReplay({ map, getDatasets, layers, announce }) {
   });
 
   return {
-    open, close, refresh,
+    open, close, refresh, pause, seek,
     get active() { return state.active; },
+    get range() { return { min: state.min, max: state.max }; },
+    /** Datasets currently being replayed (visible ones with dates). */
+    get datasets() { return state.tracks.map((t) => t.ds); },
+    hasTimedData,
+    setTrail(v) { trailSel.value = v; draw(); },
+    get trail() { return trailSel.value; },
   };
 }

@@ -14,6 +14,8 @@ A progressive web app (PWA) for putting coordinate data on a map. Upload CSV fil
 - **Time-ordered tracks:** points are joined by date/time (or file order) with solid, dashed or dotted lines, direction arrows and optional sequence numbers on the markers.
 - **Point details:** date and time, coordinates (with a copy button), and the distance and time since the previous point, plus every other column from the row. *Previous* and *Next* buttons step along the track.
 - **Route replay:** a time slider plays the routes back. You can scrub to any moment, step from point to point, pick the speed (whole route in 15 s to 2 min, real time, or 1 min/10 min/1 hour/1 day per second), keep the whole trail or only the last 15 minutes, hour or day, and have the map follow the moving markers. Space plays and pauses, and Esc closes the replay.
+- **Video export:** saves the replay as an MP4 video (WebM in Firefox), in HD or Full HD and 15 seconds to 2 minutes long. The video shows a title, a running date/time clock, a legend and a progress bar. Recording happens in the browser and takes as long as the video itself.
+- **PDF report:** a landscape A4 or US Letter report for clients, with a title, "prepared for" line and notes, a full-page map with a legend, a summary table (points, first/last time, duration, route distance, average speed), and optional tables of every point.
 - **Table view** for each dataset, as an accessible alternative to the map. **Export** each dataset as GeoJSON or CSV.
 - **Private:** data stays in the browser (IndexedDB) and survives reloads. Nothing is uploaded to a server.
 - **Works offline** once installed. Map tiles you've already viewed are cached.
@@ -70,10 +72,13 @@ js/importers.js       CSV/paste parsing, column detection, GeoJSON/GPX/KML
 js/coords.js          Coordinate parsing (decimal, DMS, combined, WKT)
 js/dates.js           Date/time parsing and formatting
 js/icons.js           SVG marker shapes and palette
+js/replay.js          Route replay / time slider
+js/capture.js         Draws the map onto a canvas for exports
+js/exporters.js       Video recording and PDF report
 js/samples.js         Built-in sample datasets
 js/store.js           IndexedDB persistence
 js/config.js          Map tile providers
 sw.js                 Service worker (offline + tile cache)
 manifest.webmanifest  PWA manifest
-vendor/               Leaflet 1.9.4 and PapaParse 5.4.1 (bundled for offline use)
+vendor/               Leaflet 1.9.4, PapaParse 5.4.1, jsPDF 2.5.1 + AutoTable 3.8.2 (bundled for offline use)
 ```
