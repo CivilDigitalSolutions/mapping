@@ -851,6 +851,22 @@ function syncExportKind() {
   const kind = exportKind();
   $$('[data-kind]', exportDlg).forEach((el) => { el.hidden = el.dataset.kind !== kind; });
   $('#ex-go').textContent = kind === 'pdf' ? 'Create PDF' : 'Record video';
+  const follow = $('[name="exview"][value="follow"]');
+  if (kind !== 'video' && follow.checked) $('[name="exview"][value="fit"]').checked = true;
+  const view = $('[name="exview"]:checked').value;
+  $('#ex-follow-opts').hidden = !(kind === 'video' && view === 'follow');
+  $('#ex-view-hint').textContent = view === 'follow'
+    ? 'The camera glides along with the moving markers. Moving the map on screen won\'t change the video.'
+    : 'The map is fixed when you start. Moving the map on screen won\'t change the export.';
+}
+
+function fillFollowTargets() {
+  const sel = $('#ex-follow-target');
+  const prev = sel.value;
+  const timed = datasets.filter((d) => d.visible && d.points.some((p) => p.t !== null && p.t !== undefined));
+  sel.innerHTML = (timed.length > 1 ? '<option value="all">All moving datasets</option>' : '') +
+    timed.map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('');
+  if ([...sel.options].some((o) => o.value === prev)) sel.value = prev;
 }
 
 function openExport(kind = 'pdf') {
@@ -863,6 +879,7 @@ function openExport(kind = 'pdf') {
       : `The routes moving over time, with the date and time on screen. Saved as ${support.ext.toUpperCase()}.`;
   $(`[name="exportkind"][value="${kind === 'video' && canVideo() ? 'video' : 'pdf'}"]`).checked = true;
   $('#ex-trail').value = replay.trail || 'all';
+  fillFollowTargets();
   $('#ex-progress').hidden = true;
   setExportBusy(false);
   syncExportKind();
@@ -929,8 +946,16 @@ async function runExport() {
       exportProgress(0, 'Getting the map ready…');
       const res = await recordVideo({
         map, replay, datasets: visible, signal: controller.signal,
-        opts: { title, seconds: Number($('#ex-length').value), size: $('#ex-size').value, view, trail: $('#ex-trail').value },
-        onProgress: (f) => exportProgress(f, `Recording… ${Math.round(f * 100)}%`),
+        opts: {
+          title,
+          seconds: Number($('#ex-length').value),
+          size: $('#ex-size').value,
+          camera: view,
+          followTarget: $('#ex-follow-target').value || 'all',
+          followZoom: Number($('#ex-follow-zoom').value),
+          trail: $('#ex-trail').value,
+        },
+        onProgress: exportProgress,
       });
       if (!res) { exportProgress(0, 'Recording stopped.'); return; }
       downloadBlob(`${base}.${res.ext}`, res.blob);
@@ -950,6 +975,7 @@ async function runExport() {
 $('#btn-export').addEventListener('click', () => openExport('pdf'));
 $('#rp-video').addEventListener('click', () => openExport('video'));
 $$('[name="exportkind"]').forEach((r) => r.addEventListener('change', () => { syncExportKind(); setExportBusy(false); }));
+$$('[name="exview"]').forEach((r) => r.addEventListener('change', syncExportKind));
 $('#ex-go').addEventListener('click', runExport);
 $('#ex-cancel').addEventListener('click', () => {
   if (exportRun?.kind === 'video') exportRun.controller.abort();

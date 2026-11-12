@@ -332,6 +332,14 @@ export function createReplay({ map, getDatasets, layers, announce }) {
     /** Datasets currently being replayed (visible ones with dates). */
     get datasets() { return state.tracks.map((t) => t.ds); },
     hasTimedData,
+    /** Current positions of the moving markers: [{ ds, latlng }]. */
+    heads() {
+      return state.tracks.filter((tr) => tr.group.hasLayer(tr.head)).map((tr) => ({
+        ds: tr.ds,
+        latlng: tr.head.getLatLng(),
+        done: state.t >= tr.pts[tr.pts.length - 1].t, // reached its last point
+      }));
+    },
     setTrail(v) { trailSel.value = v; draw(); },
     get trail() { return trailSel.value; },
   };

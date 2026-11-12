@@ -1,17 +1,37 @@
 /* global L */
 // Video (replay) and PDF report exports. Everything runs in the browser —
 // no data is sent anywhere.
+//
+// Both exports draw through their own camera (see capture.js), so the
+// on-screen map can be moved, zoomed or resized during an export without
+// changing the result.
 
-import { withMapSize, drawBasemap, drawOverlays, drawLegend, drawTitleClock, drawProgress, drawAttribution, markerPng } from './capture.js';
+import {
+  makeCamera, fitCamera, fitZoom, boundsCenter, currentViewCamera, tileSource, tilesFor, preloadTiles,
+  drawTiles, drawOverlays, drawLegend, drawTitleClock, drawProgress, drawAttribution, markerPng,
+} from './capture.js';
 import { formatDateTime, formatDuration, formatDistance } from './dates.js';
 import { distanceMetres } from './coords.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const CRS = L.CRS.EPSG3857;
 
 function boundsOf(datasets) {
   const b = L.latLngBounds([]);
   datasets.forEach((d) => d.points.forEach((p) => b.extend([p.lat, p.lon])));
   return b;
+}
+
+/** Stop the on-screen map from being dragged or zoomed while exporting. */
+function freezeMap(map) {
+  const handlers = ['dragging', 'touchZoom', 'doubleClickZoom', 'scrollWheelZoom', 'boxZoom', 'keyboard'];
+  const was = handlers.filter((h) => map[h] && map[h].enabled());
+  was.forEach((h) => map[h].disable());
+  map.getContainer().classList.add('is-frozen');
+  return () => {
+    was.forEach((h) => map[h].enable());
+    map.getContainer().classList.remove('is-frozen');
+  };
 }
 
 // =================================================================== video
@@ -31,8 +51,61 @@ export function videoSupport() {
 }
 
 /**
+ * Work out a camera for every frame before recording starts.
+ * camera: 'fit' | 'current' | 'follow'
+ * For 'follow', the camera glides after the moving markers (one dataset, or all of them).
+ */
+function planCameras({ map, replay, frames, W, H, opts, legendBounds }) {
+  if (opts.camera !== 'follow') {
+    const cam = opts.camera === 'current' ? currentViewCamera(map, W, H) : fitCamera(legendBounds, W, H);
+    return frames.map(() => cam);
+  }
+
+  // How close to zoom in: relative to the zoom that fits the whole route, so it
+  // works for a walk around a site and for a drive across a country alike.
+  const overview = fitZoom(legendBounds, W, H, { padX: W * 0.08, padY: H * 0.12, maxZoom: 18 });
+  const followZoom = Math.min(17, overview + Number(opts.followZoom || 2));
+  const follow = opts.followTarget || 'all';
+  // Generous margins so markers stay clear of the clock and legend boxes
+  const padX = W * 0.22, padY = H * 0.28;
+
+  // Raw target (centre in world pixels at zoom 0, plus zoom) for each frame
+  let last = null;
+  const targets = frames.map((t) => {
+    replay.seek(t);
+    let heads = replay.heads();
+    if (follow !== 'all') heads = heads.filter((h) => h.ds.id === follow);
+    else if (heads.some((h) => !h.done)) heads = heads.filter((h) => !h.done); // let go of finished routes
+    if (!heads.length) return last;
+    const b = L.latLngBounds(heads.map((h) => h.latlng));
+    // With several markers, zoom out as needed to keep them all in shot
+    const z = heads.length > 1 ? Math.min(followZoom, fitZoom(b, W, H, { padX, padY, maxZoom: followZoom })) : followZoom;
+    last = { p: CRS.latLngToPoint(boundsCenter(b), 0), z };
+    return last;
+  });
+  // Frames before anything starts moving look at the first position
+  const first = targets.find(Boolean) || { p: CRS.latLngToPoint(boundsCenter(legendBounds), 0), z: overview };
+  for (let i = 0; i < targets.length && !targets[i]; i++) targets[i] = first;
+
+  // Smooth the path so the camera glides instead of jerking from point to point.
+  // Forward and backward passes cancel out the lag a one-way filter would add.
+  const smooth = (vals, a) => {
+    const f = vals.slice();
+    for (let i = 1; i < f.length; i++) f[i] = f[i - 1] + (f[i] - f[i - 1]) * a;
+    for (let i = f.length - 2; i >= 0; i--) f[i] = f[i + 1] + (f[i] - f[i + 1]) * a;
+    return f;
+  };
+  const a = 0.08;
+  const xs = smooth(targets.map((t) => t.p.x), a);
+  const ys = smooth(targets.map((t) => t.p.y), a);
+  const zs = smooth(targets.map((t) => t.z), a / 2);
+  return frames.map((_, i) => makeCamera(CRS.pointToLatLng(L.point(xs[i], ys[i]), 0), zs[i], W, H));
+}
+
+/**
  * Record the route replay to a video file.
- * opts: { title, seconds, size: '720'|'1080', view: 'fit'|'current', trail }
+ * opts: { title, seconds, size: '720'|'1080', camera: 'fit'|'current'|'follow', followTarget, followZoom, trail }
+ * Every setting is fixed when recording starts; nothing on screen can change the result.
  * Returns { blob, ext, tilesOk } or null if cancelled.
  */
 export async function recordVideo({ map, replay, datasets = [], opts, onProgress, signal }) {
@@ -41,24 +114,48 @@ export async function recordVideo({ map, replay, datasets = [], opts, onProgress
   if (!replay.active && !replay.open()) throw new Error('None of the visible datasets have dates and times to replay.');
   replay.pause();
   if (opts.trail) replay.setTrail(opts.trail);
-  const { min, max } = replay.range;
-  if (!(max > min)) throw new Error('The replay needs at least two different dates or times.');
+  let { min, max } = replay.range;
   const shown = replay.datasets;
+  // Following one dataset: the video covers just that dataset's time span
+  if (opts.camera === 'follow' && opts.followTarget && opts.followTarget !== 'all') {
+    const target = shown.find((d) => d.id === opts.followTarget);
+    const ts = target ? target.points.map((p) => p.t).filter((t) => t !== null && t !== undefined) : [];
+    if (ts.length > 1) { min = Math.min(...ts); max = Math.max(...ts); }
+  }
+  if (!(max > min)) throw new Error('The replay needs at least two different dates or times.');
   // Legend and framing cover every visible dataset, including ones without dates
   const legend = datasets.length ? datasets : shown;
+  const legendBounds = boundsOf(legend);
 
   const [W, H] = opts.size === '1080' ? [1920, 1080] : [1280, 720];
   const u = W / 1280;
+  const fps = 30;
+  const N = Math.max(2, Math.round(opts.seconds * fps));
+  const lead = fps;        // 1 s still at the start
+  const hold = fps * 2;    // 2 s still at the end
+  const total = lead + N + hold;
+  const timeAt = (f) => {
+    const k = Math.min(Math.max(f - lead, 0), N - 1);
+    return min + ((max - min) * k) / (N - 1);
+  };
+  const frameTimes = Array.from({ length: total }, (_, f) => timeAt(f));
 
-  return withMapSize(map, W, H, { view: opts.view, bounds: boundsOf(legend) }, async () => {
+  const unfreeze = freezeMap(map);
+  try {
+    // 1. Plan the camera for every frame, then download every map tile needed.
+    onProgress?.(0, 'Planning the camera…');
+    await sleep(0);
+    const cams = planCameras({ map, replay, frames: frameTimes, W, H, opts, legendBounds });
+    const src = tileSource(map);
+    const urls = new Set();
+    for (const c of cams) for (const t of tilesFor(c, src)) urls.add(t.url);
+    const tiles = await preloadTiles([...urls], (d, n) => onProgress?.(0, `Downloading map… ${d} of ${n} tiles`), signal);
+    if (signal?.aborted) return null;
+
+    // 2. Record in real time.
     const canvas = document.createElement('canvas');
     canvas.width = W; canvas.height = H;
     const ctx = canvas.getContext('2d');
-    const base = document.createElement('canvas');
-    base.width = W; base.height = H;
-    const tilesOk = drawBasemap(base.getContext('2d'), map, 1);
-
-    const fps = 30;
     const stream = canvas.captureStream(0);
     const track = stream.getVideoTracks()[0];
     const manual = typeof track.requestFrame === 'function';
@@ -67,28 +164,23 @@ export async function recordVideo({ map, replay, datasets = [], opts, onProgress
     const chunks = [];
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     const stopped = new Promise((r) => { rec.onstop = r; });
-
-    const N = Math.max(2, Math.round(opts.seconds * fps));
-    const lead = fps;        // 1 s still at the start
-    const hold = fps * 2;    // 2 s still at the end
-    const total = lead + N + hold;
     const color = shown[0]?.style.color || '#0b5cab';
 
     const frame = async (f) => {
-      const k = Math.min(Math.max(f - lead, 0), N - 1);
-      const t = min + ((max - min) * k) / (N - 1);
+      const t = frameTimes[f];
+      const cam = cams[f];
       replay.seek(t);
-      ctx.drawImage(base, 0, 0);
-      await drawOverlays(ctx, map, 1);
+      drawTiles(ctx, cam, src);
+      await drawOverlays(ctx, map, cam);
       drawTitleClock(ctx, { title: opts.title, time: formatDateTime(t), u });
       await drawLegend(ctx, legend, u, { bottom: 34 });
       drawAttribution(ctx, map, u, 6 * u);
-      drawProgress(ctx, k / (N - 1), color, u);
+      drawProgress(ctx, (t - min) / (max - min), color, u);
     };
 
-    // Warm up the image cache so the first frames aren't slow
+    // Warm up the marker image cache so the first frames aren't slow
     await frame(0);
-    await frame(lead + N - 1);
+    await frame(total - 1);
 
     rec.start(1000);
     const t0 = performance.now();
@@ -96,7 +188,7 @@ export async function recordVideo({ map, replay, datasets = [], opts, onProgress
       if (signal?.aborted) break;
       await frame(f);
       if (manual) track.requestFrame();
-      onProgress?.(f / total);
+      onProgress?.(f / total, `Recording… ${Math.round((f / total) * 100)}%`);
       const wait = t0 + ((f + 1) * 1000) / fps - performance.now();
       if (wait > 0) await sleep(wait);
     }
@@ -105,9 +197,11 @@ export async function recordVideo({ map, replay, datasets = [], opts, onProgress
     stream.getTracks().forEach((t) => t.stop());
     liveStream.getTracks().forEach((t) => t.stop());
     if (signal?.aborted) return null;
-    onProgress?.(1);
-    return { blob: new Blob(chunks, { type: support.mime.split(';')[0] }), ext: support.ext, tilesOk };
-  });
+    onProgress?.(1, 'Done');
+    return { blob: new Blob(chunks, { type: support.mime.split(';')[0] }), ext: support.ext, tilesOk: tiles.failed === 0 };
+  } finally {
+    unfreeze();
+  }
 }
 
 // =================================================================== PDF
@@ -184,16 +278,23 @@ export async function buildPdf({ map, replay, datasets, sequenceOf, opts, onProg
   const mapH = pageH - M - headerH - 12;
   const pxW = 1400, pxH = Math.round(pxW * (mapH / mapW));
   const scale = 2;
-  const shot = await withMapSize(map, pxW, pxH, { view: opts.view, bounds: boundsOf(datasets) }, async () => {
+  const unfreeze = freezeMap(map);
+  let shot;
+  try {
+    const cam = opts.view === 'current' ? currentViewCamera(map, pxW, pxH, scale) : fitCamera(boundsOf(datasets), pxW, pxH, scale);
+    const src = tileSource(map);
+    const tiles = await preloadTiles(tilesFor(cam, src).map((t) => t.url), (d, n) => onProgress?.(0.15, `Downloading map… ${d} of ${n} tiles`));
     const c = document.createElement('canvas');
     c.width = pxW * scale; c.height = pxH * scale;
     const ctx = c.getContext('2d');
-    const tilesOk = drawBasemap(ctx, map, scale);
-    await drawOverlays(ctx, map, scale);
+    drawTiles(ctx, cam, src);
+    await drawOverlays(ctx, map, cam);
     await drawLegend(ctx, datasets, scale * 1.1, { bottom: 26 });
     drawAttribution(ctx, map, scale);
-    return { url: c.toDataURL('image/jpeg', 0.9), tilesOk };
-  });
+    shot = { url: c.toDataURL('image/jpeg', 0.9), tilesOk: tiles.failed === 0 };
+  } finally {
+    unfreeze();
+  }
 
   // ---- Page 1: title + map
   onProgress?.(0.45, 'Laying out the report…');
@@ -215,7 +316,7 @@ export async function buildPdf({ map, replay, datasets, sequenceOf, opts, onProg
   doc.rect(M, mapY, mapW, mapH);
   if (!shot.tilesOk) {
     doc.setFontSize(8);
-    doc.text('Map background could not be included (tile server did not allow it).', M, mapY + mapH + 4);
+    doc.text('Some of the map background could not be downloaded.', M, mapY + mapH + 4);
   }
 
   // ---- Page 2: summary

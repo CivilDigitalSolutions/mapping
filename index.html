@@ -284,7 +284,7 @@
           <li><strong>Pick a marker:</strong> give each dataset its own shape (circle, square, triangle, waypoint pin, flag and others) and colour so you can tell them apart.</li>
           <li><strong>Follow the path:</strong> when points have dates and times, they're joined in time order with a line. Arrows show the direction of travel. You can turn this off in the dataset's settings.</li>
           <li><strong>Replay:</strong> press <em>Replay</em> to play the routes back over time. Drag the slider to any moment, use the step buttons to jump from point to point, and choose the speed and how much of the trail stays visible.</li>
-          <li><strong>Export:</strong> press <em>Export</em> to save a PDF report for a client (map, legend, summary and point tables), or a video of the replay for presentations. The <em>Save video</em> button in the replay bar does the same.</li>
+          <li><strong>Export:</strong> press <em>Export</em> to save a PDF report for a client (map, legend, summary and point tables), or a video of the replay for presentations. Videos can keep the map still or follow the route as it moves. The <em>Save video</em> button in the replay bar does the same.</li>
           <li><strong>Inspect:</strong> select any marker to see its date, time, distance and time since the previous point, and its other columns.</li>
         </ol>
         <h3>Coordinate formats understood</h3>
@@ -395,6 +395,22 @@
           <div class="seg" role="radiogroup" aria-labelledby="lbl-exview">
             <label><input type="radio" name="exview" value="fit" checked> Fit all the data</label>
             <label><input type="radio" name="exview" value="current"> Current map view</label>
+            <label data-kind="video" hidden><input type="radio" name="exview" value="follow"> Follow the route</label>
+          </div>
+          <p class="hint" id="ex-view-hint">The map is fixed when you start. Moving the map on screen won't change the export.</p>
+        </div>
+        <div class="grid-2" id="ex-follow-opts" hidden>
+          <div class="field">
+            <label for="ex-follow-target" class="field-label">Follow</label>
+            <select id="ex-follow-target"></select>
+          </div>
+          <div class="field">
+            <label for="ex-follow-zoom" class="field-label">How close</label>
+            <select id="ex-follow-zoom">
+              <option value="3">Close up</option>
+              <option value="2" selected>Medium</option>
+              <option value="1">Wide</option>
+            </select>
           </div>
         </div>
         <p class="hint">Only datasets that are switched on in the side panel are included.</p>
