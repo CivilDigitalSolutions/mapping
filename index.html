@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Data Mapper</title>
+  <meta name="description" content="Overlay CSV or pasted coordinate data on a map, with time-ordered tracks and custom markers per dataset.">
+  <meta name="theme-color" content="#0b5cab">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <a class="skip-link" href="#panel">Skip to datasets</a>
+
+  <header class="topbar">
+    <div class="brand">
+      <img src="icons/icon.svg" alt="" width="28" height="28">
+      <h1>Data Mapper</h1>
+    </div>
+    <nav class="top-actions" aria-label="Main actions">
+      <button type="button" class="btn btn-primary" id="btn-add">
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" fill="none"/></svg>
+        <span>Add data</span>
+      </button>
+      <button type="button" class="btn" id="btn-fit" title="Zoom the map to show all visible data">
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+        <span class="hide-sm">Fit all</span>
+      </button>
+      <button type="button" class="btn" id="btn-help">
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" fill="none"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.7M12 17h.01" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+        <span class="hide-sm">Help</span>
+      </button>
+      <button type="button" class="btn panel-toggle" id="btn-panel" aria-controls="panel" aria-expanded="false">
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span>Datasets</span>
+      </button>
+    </nav>
+  </header>
+
+  <main class="layout">
+    <aside id="panel" class="panel" tabindex="-1" aria-labelledby="panel-title">
+      <div class="panel-head">
+        <h2 id="panel-title">Datasets</h2>
+        <span class="muted" id="panel-summary"></span>
+      </div>
+      <div id="empty-state" class="empty-state">
+        <p><strong>No data yet.</strong></p>
+        <p>Upload a CSV file or paste rows of latitude and longitude, with dates and times if you have them.</p>
+        <button type="button" class="btn btn-primary" id="btn-add-empty">Add data</button>
+        <button type="button" class="btn btn-link" id="btn-sample">Try sample data</button>
+      </div>
+      <ul id="dataset-list" class="dataset-list" aria-label="Loaded datasets"></ul>
+    </aside>
+
+    <div id="map" class="map" role="region" aria-label="Map. Use arrow keys to pan and plus or minus to zoom. Press Tab to move between markers."></div>
+  </main>
+
+  <div id="live" class="sr-only" role="status" aria-live="polite"></div>
+  <div id="toast" class="toast" role="alert" hidden></div>
+
+  <!-- ================================================================ Import dialog -->
+  <dialog id="dlg-import" class="dialog dialog-wide" aria-labelledby="import-title">
+    <form method="dialog" class="dialog-inner" id="import-form" novalidate>
+      <header class="dialog-head">
+        <h2 id="import-title">Add data</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Close">✕</button>
+      </header>
+
+      <!-- Step 1: choose source -->
+      <section id="import-step-source" class="dialog-body">
+        <div class="tabs" role="tablist" aria-label="Data source">
+          <button type="button" role="tab" id="tab-file" aria-controls="pane-file" aria-selected="true">Upload file</button>
+          <button type="button" role="tab" id="tab-paste" aria-controls="pane-paste" aria-selected="false" tabindex="-1">Paste data</button>
+        </div>
+
+        <div role="tabpanel" id="pane-file" aria-labelledby="tab-file" class="tabpanel">
+          <label class="dropzone" id="dropzone">
+            <input type="file" id="file-input" multiple accept=".csv,.tsv,.txt,.json,.geojson,.gpx,.kml,text/csv,text/plain,application/json,application/geo+json">
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="40" height="40"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span class="dz-title">Choose files or drag them here</span>
+            <span class="muted">CSV, TSV, TXT, GeoJSON, GPX or KML. You can pick several files; each becomes its own dataset.</span>
+          </label>
+        </div>
+
+        <div role="tabpanel" id="pane-paste" aria-labelledby="tab-paste" class="tabpanel" hidden>
+          <label for="paste-input" class="field-label">Paste rows from a spreadsheet, CSV text or a list of coordinates</label>
+          <textarea id="paste-input" rows="10" spellcheck="false" placeholder="Latitude, Longitude, Date, Time&#10;51.5007, -0.1246, 05/03/2024, 09:15&#10;51.5033, -0.1196, 05/03/2024, 09:40&#10;&#10;or simply:&#10;51.5007, -0.1246&#10;51°30'12&quot;N 0°07'10&quot;W"></textarea>
+          <p class="hint">Column headings are optional. Commas, tabs and semicolons all work.</p>
+          <div class="row-actions">
+            <button type="button" class="btn btn-primary" id="btn-use-paste">Continue</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 2: map columns & style -->
+      <section id="import-step-map" class="dialog-body" hidden>
+        <p class="muted" id="import-file-label"></p>
+
+        <div class="field">
+          <label for="imp-name" class="field-label">Dataset name</label>
+          <input type="text" id="imp-name" autocomplete="off">
+        </div>
+
+        <fieldset class="group" id="imp-columns">
+          <legend>Which columns hold what?</legend>
+          <p class="hint">We've guessed for you. Check the preview below and change anything that looks wrong.</p>
+
+          <div class="field">
+            <span class="field-label" id="lbl-coordmode">Coordinates are in</span>
+            <div class="seg" role="radiogroup" aria-labelledby="lbl-coordmode">
+              <label><input type="radio" name="coordmode" value="separate" checked> Two columns (latitude and longitude)</label>
+              <label><input type="radio" name="coordmode" value="combined"> One column (e.g. "51.5, -0.12")</label>
+            </div>
+          </div>
+          <div class="grid-2" data-show="separate">
+            <div class="field"><label for="imp-lat" class="field-label">Latitude column</label><select id="imp-lat"></select></div>
+            <div class="field"><label for="imp-lon" class="field-label">Longitude column</label><select id="imp-lon"></select></div>
+          </div>
+          <div class="grid-2" data-show="combined" hidden>
+            <div class="field"><label for="imp-coords" class="field-label">Coordinates column</label><select id="imp-coords"></select></div>
+            <div class="field"><label for="imp-order" class="field-label">Order inside the column</label>
+              <select id="imp-order"><option value="latlon">Latitude first, then longitude</option><option value="lonlat">Longitude first, then latitude</option></select>
+            </div>
+          </div>
+
+          <div class="field">
+            <span class="field-label" id="lbl-timemode">Date and time</span>
+            <div class="seg" role="radiogroup" aria-labelledby="lbl-timemode">
+              <label><input type="radio" name="timemode" value="single" checked> One column</label>
+              <label><input type="radio" name="timemode" value="split"> Separate date and time columns</label>
+              <label><input type="radio" name="timemode" value="none"> No dates</label>
+            </div>
+          </div>
+          <div class="grid-3">
+            <div class="field" data-show-time="single"><label for="imp-datetime" class="field-label">Date and time column</label><select id="imp-datetime"></select></div>
+            <div class="field" data-show-time="split" hidden><label for="imp-date" class="field-label">Date column</label><select id="imp-date"></select></div>
+            <div class="field" data-show-time="split" hidden><label for="imp-time" class="field-label">Time column</label><select id="imp-time"></select></div>
+            <div class="field" data-show-time="single split"><label for="imp-dateorder" class="field-label">Dates are written as</label>
+              <select id="imp-dateorder"><option value="dmy">Day / Month / Year</option><option value="mdy">Month / Day / Year</option></select>
+            </div>
+          </div>
+          <div class="field">
+            <label for="imp-label" class="field-label">Name or label column <span class="muted">(optional)</span></label>
+            <select id="imp-label"></select>
+          </div>
+        </fieldset>
+
+        <div id="imp-status" class="status-box" role="status" aria-live="polite"></div>
+        <details id="imp-skipped" class="skipped" hidden>
+          <summary>Show rows that will be skipped</summary>
+          <ul id="imp-skipped-list"></ul>
+        </details>
+
+        <div class="preview-wrap" id="imp-preview-wrap">
+          <table class="preview" id="imp-preview">
+            <caption>Preview of the first rows</caption>
+          </table>
+        </div>
+
+        <fieldset class="group">
+          <legend>Marker style</legend>
+          <div id="imp-style"></div>
+        </fieldset>
+      </section>
+
+      <footer class="dialog-foot" id="import-foot" hidden>
+        <span class="muted" id="import-queue"></span>
+        <button type="button" class="btn" id="btn-import-back">Back</button>
+        <button type="button" class="btn" id="btn-import-skip" hidden>Skip this file</button>
+        <button type="button" class="btn btn-primary" id="btn-import-go">Add to map</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- ================================================================ Dataset settings -->
+  <dialog id="dlg-settings" class="dialog" aria-labelledby="settings-title">
+    <form method="dialog" class="dialog-inner" id="settings-form">
+      <header class="dialog-head">
+        <h2 id="settings-title">Dataset settings</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Close">✕</button>
+      </header>
+      <div class="dialog-body">
+        <div class="field">
+          <label for="set-name" class="field-label">Dataset name</label>
+          <input type="text" id="set-name" autocomplete="off">
+        </div>
+        <div id="set-style"></div>
+      </div>
+      <footer class="dialog-foot">
+        <button type="submit" class="btn btn-primary" value="done">Done</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- ================================================================ Table view -->
+  <dialog id="dlg-table" class="dialog dialog-wide" aria-labelledby="table-title">
+    <div class="dialog-inner">
+      <header class="dialog-head">
+        <h2 id="table-title">Data table</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Close">✕</button>
+      </header>
+      <div class="dialog-body">
+        <div class="preview-wrap tall">
+          <table class="preview data-table" id="data-table"></table>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ================================================================ Help -->
+  <dialog id="dlg-help" class="dialog" aria-labelledby="help-title">
+    <form method="dialog" class="dialog-inner">
+      <header class="dialog-head">
+        <h2 id="help-title">How to use Data Mapper</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Close">✕</button>
+      </header>
+      <div class="dialog-body prose">
+        <ol>
+          <li><strong>Add data:</strong> upload one or more files, or paste rows copied from a spreadsheet. Each file or paste becomes its own dataset.</li>
+          <li><strong>Check the columns:</strong> the app guesses which columns are latitude, longitude, date and time. Change any guess that looks wrong. The preview shows what will be mapped.</li>
+          <li><strong>Pick a marker:</strong> give each dataset its own shape (circle, square, triangle, waypoint pin, flag and others) and colour so you can tell them apart.</li>
+          <li><strong>Follow the path:</strong> when points have dates and times, they're joined in time order with a line. Arrows show the direction of travel. You can turn this off in the dataset's settings.</li>
+          <li><strong>Inspect:</strong> select any marker to see its date, time, distance and time since the previous point, and its other columns.</li>
+        </ol>
+        <h3>Coordinate formats understood</h3>
+        <ul>
+          <li>Decimal degrees: <code>51.5007, -0.1246</code></li>
+          <li>Degrees, minutes, seconds: <code>51°30'02"N 0°07'29"W</code></li>
+          <li>Degrees and decimal minutes: <code>51 30.04N, 0 07.48W</code></li>
+          <li>One combined column, or separate latitude and longitude columns</li>
+          <li>WKT points: <code>POINT(-0.1246 51.5007)</code></li>
+          <li>Files: CSV, TSV, GeoJSON, GPX and KML</li>
+        </ul>
+        <h3>Dates and times understood</h3>
+        <ul>
+          <li><code>2024-03-05T09:15:00Z</code>, <code>05/03/2024 09:15</code>, <code>3/5/2024 9:15 AM</code>, <code>5 Mar 2024 09:15</code></li>
+          <li>Separate date and time columns, Unix timestamps and Excel date numbers</li>
+        </ul>
+        <h3>Privacy</h3>
+        <p>Your data never leaves this device. It is stored in this browser so it's still here next time. The only outside requests are for the map background tiles.</p>
+        <h3>Keyboard</h3>
+        <p>On the map, arrow keys pan, <kbd>+</kbd> and <kbd>-</kbd> zoom, <kbd>Tab</kbd> moves between markers and <kbd>Enter</kbd> opens one.</p>
+      </div>
+      <footer class="dialog-foot">
+        <button type="button" class="btn" id="btn-sample-csv">Download sample CSV</button>
+        <button type="submit" class="btn btn-primary">Got it</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- ================================================================ Confirm -->
+  <dialog id="dlg-confirm" class="dialog dialog-small" aria-labelledby="confirm-title" aria-describedby="confirm-msg">
+    <form method="dialog" class="dialog-inner">
+      <div class="dialog-body">
+        <h2 id="confirm-title">Are you sure?</h2>
+        <p id="confirm-msg"></p>
+      </div>
+      <footer class="dialog-foot">
+        <button type="submit" class="btn" value="cancel" autofocus>Cancel</button>
+        <button type="submit" class="btn btn-danger" value="ok" id="confirm-ok">Remove</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script src="vendor/papaparse.min.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
