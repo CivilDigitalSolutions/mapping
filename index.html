@@ -33,6 +33,10 @@
         <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
         <span class="hide-sm">Fit all</span>
       </button>
+      <button type="button" class="btn" id="btn-export" aria-label="Export" disabled title="Save a PDF report or a video of the replay">
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><path d="M12 4v11M7 10l5 5 5-5M5 19h14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="hide-sm">Export</span>
+      </button>
       <button type="button" class="btn" id="btn-help" aria-label="Help">
         <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" fill="none"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.7M12 17h.01" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
         <span class="hide-sm">Help</span>
@@ -76,6 +80,10 @@
         <div class="rp-time-wrap">
           <output id="rp-time" class="rp-time" for="rp-slider"></output>
         </div>
+        <button type="button" class="btn btn-sm rp-video" id="rp-video">
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><rect x="3" y="6" width="13" height="12" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><path d="M16 10l5-3v10l-5-3z" fill="currentColor"/></svg>
+          <span>Save video</span>
+        </button>
         <button type="button" class="icon-btn rp-close" id="rp-close" aria-label="Close replay and show all points">✕</button>
       </div>
       <div class="rp-track">
@@ -276,6 +284,7 @@
           <li><strong>Pick a marker:</strong> give each dataset its own shape (circle, square, triangle, waypoint pin, flag and others) and colour so you can tell them apart.</li>
           <li><strong>Follow the path:</strong> when points have dates and times, they're joined in time order with a line. Arrows show the direction of travel. You can turn this off in the dataset's settings.</li>
           <li><strong>Replay:</strong> press <em>Replay</em> to play the routes back over time. Drag the slider to any moment, use the step buttons to jump from point to point, and choose the speed and how much of the trail stays visible.</li>
+          <li><strong>Export:</strong> press <em>Export</em> to save a PDF report for a client (map, legend, summary and point tables), or a video of the replay for presentations. The <em>Save video</em> button in the replay bar does the same.</li>
           <li><strong>Inspect:</strong> select any marker to see its date, time, distance and time since the previous point, and its other columns.</li>
         </ol>
         <h3>Coordinate formats understood</h3>
@@ -300,6 +309,104 @@
       <footer class="dialog-foot">
         <button type="button" class="btn" id="btn-sample-csv">Download sample CSV</button>
         <button type="submit" class="btn btn-primary">Got it</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- ================================================================ Export -->
+  <dialog id="dlg-export" class="dialog" aria-labelledby="export-title">
+    <form method="dialog" class="dialog-inner" id="export-form" novalidate>
+      <header class="dialog-head">
+        <h2 id="export-title">Export</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Close">✕</button>
+      </header>
+      <div class="dialog-body">
+        <fieldset class="choice-cards">
+          <legend class="field-label">What would you like to save?</legend>
+          <label class="choice-card">
+            <input type="radio" name="exportkind" value="pdf" checked>
+            <span class="choice-title">PDF report</span>
+            <span class="choice-desc">A map, a legend, a summary of each dataset and tables of the points. Good for sending to a client.</span>
+          </label>
+          <label class="choice-card" id="choice-video">
+            <input type="radio" name="exportkind" value="video">
+            <span class="choice-title">Video of the replay</span>
+            <span class="choice-desc" id="video-desc">The routes moving over time, with the date and time on screen. Good for presentations.</span>
+          </label>
+        </fieldset>
+
+        <div class="field">
+          <label for="ex-title" class="field-label">Title</label>
+          <input type="text" id="ex-title" autocomplete="off" placeholder="e.g. Site visits, March 2024">
+        </div>
+
+        <div data-kind="pdf">
+          <div class="field">
+            <label for="ex-for" class="field-label">Prepared for <span class="muted">(optional)</span></label>
+            <input type="text" id="ex-for" autocomplete="off" placeholder="Client or project name">
+          </div>
+          <div class="field">
+            <label for="ex-notes" class="field-label">Notes <span class="muted">(optional)</span></label>
+            <textarea id="ex-notes" rows="3" class="plain" placeholder="Anything you want the reader to know"></textarea>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label for="ex-paper" class="field-label">Paper size</label>
+              <select id="ex-paper"><option value="a4">A4 (landscape)</option><option value="letter">US Letter (landscape)</option></select>
+            </div>
+            <div class="field checks">
+              <span class="field-label">Include</span>
+              <label><input type="checkbox" id="ex-tables" checked> Tables of all points</label>
+              <label><input type="checkbox" id="ex-extra"> Other columns from the data</label>
+            </div>
+          </div>
+        </div>
+
+        <div data-kind="video" hidden>
+          <div class="grid-2">
+            <div class="field">
+              <label for="ex-length" class="field-label">Video length</label>
+              <select id="ex-length">
+                <option value="15">15 seconds</option>
+                <option value="30" selected>30 seconds</option>
+                <option value="60">1 minute</option>
+                <option value="120">2 minutes</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="ex-size" class="field-label">Size</label>
+              <select id="ex-size"><option value="720">HD (1280 × 720)</option><option value="1080">Full HD (1920 × 1080)</option></select>
+            </div>
+          </div>
+          <div class="field">
+            <label for="ex-trail" class="field-label">Show</label>
+            <select id="ex-trail">
+              <option value="all">Whole route so far</option>
+              <option value="1440">Last 24 hours</option>
+              <option value="60">Last hour</option>
+              <option value="15">Last 15 minutes</option>
+            </select>
+          </div>
+          <p class="hint">Recording takes as long as the video itself. Keep this tab open while it records.</p>
+        </div>
+
+        <div class="field">
+          <span class="field-label" id="lbl-exview">Map area</span>
+          <div class="seg" role="radiogroup" aria-labelledby="lbl-exview">
+            <label><input type="radio" name="exview" value="fit" checked> Fit all the data</label>
+            <label><input type="radio" name="exview" value="current"> Current map view</label>
+          </div>
+        </div>
+        <p class="hint">Only datasets that are switched on in the side panel are included.</p>
+
+        <div class="export-progress" id="ex-progress" hidden>
+          <progress id="ex-bar" max="1" value="0"></progress>
+          <span id="ex-status" role="status" aria-live="polite"></span>
+        </div>
+      </div>
+      <footer class="dialog-foot">
+        <button type="button" class="btn" id="ex-cancel">Cancel</button>
+        <button type="button" class="btn btn-primary" id="ex-go">Create PDF</button>
       </footer>
     </form>
   </dialog>

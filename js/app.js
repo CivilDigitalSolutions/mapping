@@ -7,6 +7,7 @@ import { distanceMetres, bearing, formatCoord } from './coords.js';
 import * as store from './store.js';
 import { SAMPLES } from './samples.js';
 import { createReplay } from './replay.js';
+import { recordVideo, buildPdf, videoSupport } from './exporters.js';
 
 // ===================================================================== state
 
@@ -349,6 +350,7 @@ function renderList() {
     });
     list.appendChild(li);
   });
+  $('#btn-export').disabled = !datasets.length;
   replay.refresh();
 }
 
@@ -836,6 +838,126 @@ $('#btn-add-empty').addEventListener('click', () => openImport('file'));
 $('#btn-sample').addEventListener('click', loadSamples);
 $('#btn-fit').addEventListener('click', fitAll);
 $('#btn-help').addEventListener('click', () => $('#dlg-help').showModal());
+
+// ===================================================================== export (PDF / video)
+
+const exportDlg = $('#dlg-export');
+let exportRun = null; // { kind, controller } while an export is running
+
+function exportKind() { return $('[name="exportkind"]:checked').value; }
+function canVideo() { return replay.hasTimedData() && !!videoSupport(); }
+
+function syncExportKind() {
+  const kind = exportKind();
+  $$('[data-kind]', exportDlg).forEach((el) => { el.hidden = el.dataset.kind !== kind; });
+  $('#ex-go').textContent = kind === 'pdf' ? 'Create PDF' : 'Record video';
+}
+
+function openExport(kind = 'pdf') {
+  if (exportRun) return;
+  const support = videoSupport();
+  $('#video-desc').textContent = !support
+    ? "This browser can't record video. Try a recent version of Chrome, Edge, Firefox or Safari."
+    : !replay.hasTimedData()
+      ? 'Needs data with dates and times.'
+      : `The routes moving over time, with the date and time on screen. Saved as ${support.ext.toUpperCase()}.`;
+  $(`[name="exportkind"][value="${kind === 'video' && canVideo() ? 'video' : 'pdf'}"]`).checked = true;
+  $('#ex-trail').value = replay.trail || 'all';
+  $('#ex-progress').hidden = true;
+  setExportBusy(false);
+  syncExportKind();
+  exportDlg.showModal();
+  $('#ex-title').focus();
+}
+
+function setExportBusy(busy) {
+  $$('input, select, textarea', exportDlg).forEach((el) => {
+    el.disabled = busy || (el.name === 'exportkind' && el.value === 'video' && !canVideo());
+  });
+  $('#ex-go').disabled = busy;
+  $('#ex-cancel').textContent = busy && exportKind() === 'video' ? 'Stop recording' : 'Cancel';
+  $('#ex-cancel').disabled = busy && exportKind() === 'pdf';
+}
+
+function exportProgress(frac, msg) {
+  $('#ex-progress').hidden = false;
+  $('#ex-bar').value = frac;
+  if (msg) $('#ex-status').textContent = msg;
+}
+
+function downloadBlob(filename, blob) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+async function runExport() {
+  const kind = exportKind();
+  const title = $('#ex-title').value.trim();
+  const view = $('[name="exview"]:checked').value;
+  const visible = datasets.filter((d) => d.visible);
+  const stamp = new Date().toISOString().slice(0, 10);
+  const base = `${safeFilename(title || (kind === 'pdf' ? 'map-report' : 'route-replay'))}_${stamp}`;
+  const controller = new AbortController();
+  exportRun = { kind, controller };
+  setExportBusy(true);
+  map.closePopup();
+  try {
+    if (kind === 'pdf') {
+      const blob = await buildPdf({
+        map, replay, datasets: visible, sequenceOf,
+        opts: {
+          title,
+          preparedFor: $('#ex-for').value.trim(),
+          notes: $('#ex-notes').value,
+          paper: $('#ex-paper').value,
+          view,
+          tables: $('#ex-tables').checked,
+          extraColumns: $('#ex-extra').checked,
+        },
+        onProgress: exportProgress,
+      });
+      downloadBlob(`${base}.pdf`, blob);
+      exportDlg.close();
+      toast('PDF report saved to your downloads.');
+      announce('PDF report saved');
+    } else {
+      exportProgress(0, 'Getting the map ready…');
+      const res = await recordVideo({
+        map, replay, datasets: visible, signal: controller.signal,
+        opts: { title, seconds: Number($('#ex-length').value), size: $('#ex-size').value, view, trail: $('#ex-trail').value },
+        onProgress: (f) => exportProgress(f, `Recording… ${Math.round(f * 100)}%`),
+      });
+      if (!res) { exportProgress(0, 'Recording stopped.'); return; }
+      downloadBlob(`${base}.${res.ext}`, res.blob);
+      exportDlg.close();
+      toast(res.tilesOk ? 'Video saved to your downloads.' : "Video saved, but the map background couldn't be included.");
+      announce('Video saved');
+    }
+  } catch (err) {
+    exportProgress(0, `Sorry, that didn't work: ${err.message}`);
+    toast(`Export failed: ${err.message}`, 'error');
+  } finally {
+    exportRun = null;
+    setExportBusy(false);
+  }
+}
+
+$('#btn-export').addEventListener('click', () => openExport('pdf'));
+$('#rp-video').addEventListener('click', () => openExport('video'));
+$$('[name="exportkind"]').forEach((r) => r.addEventListener('change', () => { syncExportKind(); setExportBusy(false); }));
+$('#ex-go').addEventListener('click', runExport);
+$('#ex-cancel').addEventListener('click', () => {
+  if (exportRun?.kind === 'video') exportRun.controller.abort();
+  else if (!exportRun) exportDlg.close();
+});
+// Don't let Esc or a backdrop click close the dialog mid-export
+exportDlg.addEventListener('cancel', (e) => { if (exportRun) e.preventDefault(); });
+exportDlg.addEventListener('click', (e) => { if (exportRun && e.target === exportDlg) e.stopImmediatePropagation(); }, true);
 $('#btn-sample-csv').addEventListener('click', () => download('sample-track.csv', SAMPLES[0].text, 'text/csv'));
 
 const panel = $('#panel');
