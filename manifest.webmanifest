@@ -1,0 +1,29 @@
+{
+  "name": "Data Mapper",
+  "short_name": "Data Mapper",
+  "description": "Overlay CSV or pasted coordinate data on a map, with time-ordered tracks and custom markers per dataset.",
+  "start_url": "./",
+  "scope": "./",
+  "id": "./",
+  "display": "standalone",
+  "background_color": "#f5f7fa",
+  "theme_color": "#0b5cab",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "file_handlers": [
+    {
+      "action": "./",
+      "accept": {
+        "text/csv": [".csv"],
+        "text/tab-separated-values": [".tsv"],
+        "application/geo+json": [".geojson"],
+        "application/gpx+xml": [".gpx"],
+        "application/vnd.google-earth.kml+xml": [".kml"]
+      }
+    }
+  ]
+}
