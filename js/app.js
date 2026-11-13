@@ -8,6 +8,7 @@ import * as store from './store.js';
 import { SAMPLES } from './samples.js';
 import { createReplay } from './replay.js';
 import { recordVideo, buildPdf, videoSupport } from './exporters.js';
+import { initAnalytics, trackEvent } from './analytics.js';
 
 // ===================================================================== state
 
@@ -760,6 +761,7 @@ $('#btn-import-go').addEventListener('click', () => {
   };
   addDataset(ds);
   addedThisSession++;
+  trackEvent(pending.item.name === 'Pasted data' ? 'import-paste' : 'import-file');
   announce(`Added ${ds.name} with ${ds.points.length} points${ds.skipped.length ? `, ${ds.skipped.length} rows skipped` : ''}.`);
   nextInQueue();
 });
@@ -825,6 +827,7 @@ function loadSamples() {
   });
   fitAll();
   announce('Sample data added');
+  trackEvent('sample-data');
 }
 
 // ===================================================================== dialogs & buttons
@@ -941,6 +944,7 @@ async function runExport() {
       downloadBlob(`${base}.pdf`, blob);
       exportDlg.close();
       toast('PDF report saved to your downloads.');
+      trackEvent('export-pdf');
       announce('PDF report saved');
     } else {
       exportProgress(0, 'Getting the map ready…');
@@ -962,6 +966,7 @@ async function runExport() {
       exportDlg.close();
       toast(res.tilesOk ? 'Video saved to your downloads.' : "Video saved, but the map background couldn't be included.");
       announce('Video saved');
+      trackEvent(view === 'follow' ? 'export-video-follow' : 'export-video');
     }
   } catch (err) {
     exportProgress(0, `Sorry, that didn't work: ${err.message}`);
@@ -973,6 +978,7 @@ async function runExport() {
 }
 
 $('#btn-export').addEventListener('click', () => openExport('pdf'));
+$('#btn-replay').addEventListener('click', () => { if (replay.active) trackEvent('replay'); });
 $('#rp-video').addEventListener('click', () => openExport('video'));
 $$('[name="exportkind"]').forEach((r) => r.addEventListener('change', () => { syncExportKind(); setExportBusy(false); }));
 $$('[name="exview"]').forEach((r) => r.addEventListener('change', syncExportKind));
@@ -1032,6 +1038,8 @@ if ('launchQueue' in window) {
     panelBtn.setAttribute('aria-expanded', 'true');
   }
 })();
+
+initAnalytics();
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
