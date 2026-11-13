@@ -1,7 +1,7 @@
 // Service worker: makes the app installable and usable offline.
 // - App files are pre-cached (bump VERSION whenever you change them).
 // - Map tiles are cached as you browse (newest 3000 kept), so areas you've viewed still show offline.
-const VERSION = 'v4';
+const VERSION = 'v5';
 const APP_CACHE = `app-${VERSION}`;
 const TILE_CACHE = 'tiles-v1';
 const MAX_TILES = 3000;
@@ -11,6 +11,7 @@ const APP_FILES = [
   'index.html',
   'manifest.webmanifest',
   'css/app.css',
+  'js/analytics.js',
   'js/app.js',
   'js/capture.js',
   'js/exporters.js',

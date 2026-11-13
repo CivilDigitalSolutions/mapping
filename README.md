@@ -44,6 +44,12 @@ The app will be at `https://<org>.github.io/<repo>/`.
 
 > GitHub Pages for a **private** repository needs a paid GitHub plan (Team or Enterprise). On those plans the published site is still public unless you have Enterprise Cloud with private Pages. Your data is never part of the site, though, because it stays in each user's browser.
 
+### Visitor counts (GoatCounter)
+
+The app can count visits with [GoatCounter](https://www.goatcounter.com). It's free for non-commercial use, uses no cookies (so no cookie banner is needed) and doesn't identify people. To turn it on, set `GOATCOUNTER_CODE` in `js/config.js` to your GoatCounter code, e.g. `'datamapper'` for `datamapper.goatcounter.com`. Leave it as `''` to turn counting off. Nothing is counted when running on localhost.
+
+Besides page views, it counts these feature uses, by name only: `import-file`, `import-paste`, `sample-data`, `replay`, `export-pdf`, `export-video` and `export-video-follow`. They appear under **Events** in the GoatCounter dashboard. No coordinates, file contents or dataset names are ever sent.
+
 ### Hosting for your organisation
 
 Copy the folder to any static host: GitHub Pages, Netlify, Azure Static Web Apps, an S3 bucket, or an internal IIS or nginx server. It must be served over **HTTPS** for the app to be installable. Once it's open in Chrome or Edge, use *Install app* in the address bar. On iOS, use *Share → Add to Home Screen*.

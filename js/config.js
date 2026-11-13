@@ -36,3 +36,8 @@ export const BASEMAPS = [
 ];
 
 export const DEFAULT_VIEW = { center: [20, 0], zoom: 2 };
+
+// Visitor counting with GoatCounter (free, no cookies, no personal data).
+// Put your GoatCounter code here, e.g. 'datamapper' for datamapper.goatcounter.com.
+// Leave it empty ('') to turn counting off.
+export const GOATCOUNTER_CODE = '';
