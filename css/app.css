@@ -550,3 +550,11 @@ textarea.plain { font-family: inherit; font-size: inherit; }
 }
 .brand-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .brand-buttons { display: flex; flex-wrap: wrap; gap: .4rem; }
+.brand-sizing { display: grid; gap: .75rem; padding: .6rem .7rem; border: 1px solid var(--line); border-radius: 8px; }
+.brand-sizing[hidden] { display: none; }
+.brand-size { display: grid; gap: .3rem; }
+.brand-size label { display: flex; justify-content: space-between; gap: .5rem; font-weight: 600; }
+.brand-size output { font-variant-numeric: tabular-nums; font-weight: 400; }
+.brand-size input[type="range"] { width: 100%; }
+.brand-mock { width: 100%; max-width: 320px; height: auto; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
+#brand-reset-size { justify-self: start; }

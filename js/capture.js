@@ -522,9 +522,10 @@ export function drawNorthArrow(ctx, cx, cy, u) {
  * The organisation's logo and/or name in a white box, top-right.
  * Returns the box's height in device pixels (0 if there's nothing to show).
  */
-export function drawBranding(ctx, logo, name, u) {
+export function drawBranding(ctx, logo, name, u, { size = 1, panel = true } = {}) {
   if (!logo && !name) return 0;
-  const pad = 10 * u, maxH = 44 * u, maxW = 200 * u;
+  // `size` scales the logo: 1 = up to 44 px tall / 200 px wide on a 1280 × 720 video
+  const pad = (panel ? 10 : 0) * u, maxH = 44 * u * size, maxW = 200 * u * size;
   let lw = 0, lh = 0;
   if (logo) {
     const s = Math.min(maxH / logo.naturalHeight, maxW / logo.naturalWidth);
@@ -538,16 +539,32 @@ export function drawBranding(ctx, logo, name, u) {
   const w = pad * 2 + lw + gap + tw;
   const h = pad * 2 + Math.max(lh, text ? 20 * u : 0);
   const x = ctx.canvas.width - w - 16 * u, y = 16 * u;
-  ctx.fillStyle = 'rgba(255,255,255,.95)';
-  ctx.shadowColor = 'rgba(0,0,0,.25)';
-  ctx.shadowBlur = 8 * u;
-  roundRect(ctx, x, y, w, h, 10 * u);
-  ctx.fill();
-  ctx.shadowColor = 'transparent';
-  if (logo) ctx.drawImage(logo, x + pad, y + (h - lh) / 2, lw, lh);
+  if (panel) {
+    ctx.fillStyle = 'rgba(255,255,255,.95)';
+    ctx.shadowColor = 'rgba(0,0,0,.25)';
+    ctx.shadowBlur = 8 * u;
+    roundRect(ctx, x, y, w, h, 10 * u);
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+  }
+  if (logo) {
+    // Smooth, high-quality scaling so the logo stays crisp
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    if (!panel) { ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 4 * u; }
+    ctx.drawImage(logo, x + pad, y + (h - lh) / 2, lw, lh);
+    ctx.shadowColor = 'transparent';
+  }
   if (text) {
-    ctx.fillStyle = '#16202b';
     ctx.textBaseline = 'middle';
+    if (!panel) {
+      // No panel: a white outline keeps the name readable on the map
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 4 * u;
+      ctx.strokeStyle = 'rgba(255,255,255,.95)';
+      ctx.strokeText(text, x + pad + lw + gap, y + h / 2);
+    }
+    ctx.fillStyle = '#16202b';
     ctx.fillText(text, x + pad + lw + gap, y + h / 2);
   }
   ctx.restore();

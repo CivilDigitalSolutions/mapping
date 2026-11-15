@@ -394,7 +394,7 @@
           <li><strong>Stops and problems:</strong> a pause sign marks each stop (with how long it lasted), a short "//" break across the line marks a gap in the recording, and a small red triangle marks a possible GPS jump. Select one for details. They're also listed on each dataset's card (<em>List them</em>). Change what counts under <em>Stops and problems</em> in the Datasets panel. To remove a bad GPS reading, open its triangle and choose <em>Remove this point</em>.</li>
           <li><strong>Follow the path:</strong> when points have dates and times, they're joined in time order with a line. Arrows show the direction of travel. You can turn this off in the dataset's settings.</li>
           <li><strong>Replay:</strong> press <em>Replay</em> to play the routes back over time. Drag the slider to any moment, use the step buttons to jump from point to point, and choose the speed and how much of the trail stays visible.</li>
-          <li><strong>Export:</strong> press <em>Export</em> to save a PDF report for a client (map, legend, summary and point tables), or a video of the replay for presentations. Videos can keep the map still or follow the route as it moves. The <em>Save video</em> button in the replay bar does the same. Under <em>Your branding</em>, add your organisation's logo and name to put them on every report and video.</li>
+          <li><strong>Export:</strong> press <em>Export</em> to save a PDF report for a client (map, legend, summary and point tables), or a video of the replay for presentations. Videos can keep the map still or follow the route as it moves. The <em>Save video</em> button in the replay bar does the same. Under <em>Your branding</em>, add your organisation's logo and name to put them on every report and video. Empty space around the logo is trimmed for you; use the size sliders to make it bigger or smaller, and the previews show how it will look.</li>
           <li><strong>Inspect:</strong> select any marker to see its date, time, distance and time since the previous point, and its other columns.</li>
         </ol>
         <h3>Coordinate formats understood</h3>
@@ -468,8 +468,24 @@
             <label for="brand-name" class="field-label">Organisation name <span class="muted">(optional)</span></label>
             <input type="text" id="brand-name" autocomplete="organization" placeholder="e.g. Civil Digital Solutions">
           </div>
+          <div id="brand-sizing" class="brand-sizing" hidden>
+            <div class="brand-size">
+              <label for="brand-pdf-size">Logo size on PDF reports <output id="brand-pdf-size-pct">100%</output></label>
+              <input type="range" id="brand-pdf-size" min="50" max="300" step="5" value="100" aria-describedby="brand-pdf-size-out">
+              <canvas id="brand-pdf-preview" class="brand-mock" width="640" height="140" role="img" aria-label="Preview of the top of a PDF report with your logo"></canvas>
+              <span id="brand-pdf-size-out" class="hint"></span>
+            </div>
+            <div class="brand-size">
+              <label for="brand-video-size">Logo size on videos <output id="brand-video-size-pct">100%</output></label>
+              <input type="range" id="brand-video-size" min="50" max="300" step="5" value="100" aria-describedby="brand-video-size-out">
+              <canvas id="brand-video-preview" class="brand-mock" width="640" height="220" role="img" aria-label="Preview of the top-right corner of a video with your logo"></canvas>
+              <span id="brand-video-size-out" class="hint"></span>
+            </div>
+            <label class="tool-check"><input type="checkbox" id="brand-panel"> White panel behind the logo on videos</label>
+            <button type="button" class="btn btn-sm" id="brand-reset-size">Reset sizes</button>
+          </div>
           <label class="tool-check"><input type="checkbox" id="brand-extras"> Add a scale bar and north arrow to the map</label>
-          <p class="hint">Shown on PDF reports and videos, and remembered in this browser for next time. PNG, JPEG, SVG or WebP; a logo with a transparent background looks best.</p>
+          <p class="hint">Shown on PDF reports and videos, and remembered in this browser for next time. PNG, JPEG, SVG or WebP; a logo with a transparent background looks best. Any empty border around it is trimmed automatically.</p>
         </fieldset>
 
         <div data-kind="pdf">
