@@ -13,6 +13,7 @@ import {
 } from './capture.js';
 import { formatDateTime, formatDuration, formatDistance, displayTimeZone } from './dates.js';
 import { distanceMetres } from './coords.js';
+import { pdfLogoSize } from './branding-ui.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const CRS = L.CRS.EPSG3857;
@@ -177,7 +178,7 @@ export async function recordVideo({ map, replay, datasets = [], opts, onProgress
       await drawOverlays(ctx, map, cam);
       drawTitleClock(ctx, { title: opts.title, time: formatDateTime(t), u });
       // Top right: logo / organisation name, with the north arrow underneath
-      const brandH = drawBranding(ctx, logo, brand.name, u);
+      const brandH = drawBranding(ctx, logo, brand.name, u, { size: brand.videoSize, panel: brand.panel });
       if (brand.extras !== false) {
         drawNorthArrow(ctx, W - 40 * u, 16 * u + (brandH ? brandH + 12 * u : 0) + 22 * u, u);
         drawScaleBar(ctx, cam, u, 26 * u);
@@ -282,7 +283,10 @@ export async function buildPdf({ map, replay, datasets, sequenceOf, opts, onProg
 
   // ---- Map image sized to fill page 1 below the header
   onProgress?.(0.15, 'Drawing the map…');
-  const headerH = (opts.preparedFor ? 24 : 19) + (opts.filterText ? 5 : 0);
+  const branding = opts.branding || {};
+  const logoSize = pdfLogoSize(branding); // mm, chosen with the size slider
+  // A big logo pushes the map down rather than overlapping it
+  const headerH = Math.max((opts.preparedFor ? 24 : 19) + (opts.filterText ? 5 : 0), logoSize ? logoSize.h + 6 : 0);
   const mapW = pageW - 2 * M;
   const mapH = pageH - M - headerH - 12;
   const pxW = 1400, pxH = Math.round(pxW * (mapH / mapW));
@@ -316,11 +320,10 @@ export async function buildPdf({ map, replay, datasets, sequenceOf, opts, onProg
   doc.setFontSize(18);
   doc.text(pdfText(opts.title || 'Map report'), M, M + 5);
   // The organisation's logo, top right of the first page
-  const branding = opts.branding || {};
-  if (branding.logo && branding.logoW && branding.logoH) {
-    const s = Math.min(15 / branding.logoH, 60 / branding.logoW); // at most 15 mm tall, 60 mm wide
-    const lw = branding.logoW * s, lh = branding.logoH * s;
-    try { doc.addImage(branding.logo, 'PNG', pageW - M - lw, M - 4 + (15 - lh) / 2, lw, lh, undefined, 'FAST'); } catch { /* an unreadable logo is left out */ }
+  if (logoSize) {
+    const { w: lw, h: lh } = logoSize;
+    const top = lh < 15 ? M - 4 + (15 - lh) / 2 : M - 4;
+    try { doc.addImage(branding.logo, 'PNG', pageW - M - lw, top, lw, lh, undefined, 'FAST'); } catch { /* an unreadable logo is left out */ }
   }
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);

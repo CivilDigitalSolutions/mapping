@@ -102,3 +102,52 @@ test('replay with colour by value draws without errors', async () => {
   await page.click('#rp-play');
   assert.deepEqual(page.errors, []);
 });
+
+// A small logo in the middle of a big empty canvas, like many exported logo files
+const PADDED_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600"><rect width="800" height="600" fill="#ffffff"/><rect x="300" y="250" width="200" height="100" fill="#0b5cab"/></svg>';
+
+test('empty space around a logo is trimmed, and the size sliders change the previews and the PDF', async () => {
+  const page = await openApp(browser, server);
+  await loadSamples(page);
+  await page.click('#btn-export');
+  await page.setInputFiles('#brand-file', writeTemp('padded.svg', PADDED_SVG));
+  await page.waitForSelector('#brand-preview img');
+  assert.ok(await page.locator('#brand-sizing').isVisible(), 'sizing controls appear once there is a logo');
+  const dims = await page.evaluate(async () => {
+    const img = new Image();
+    img.src = document.querySelector('#brand-preview img').src;
+    await img.decode();
+    return [img.naturalWidth, img.naturalHeight];
+  });
+  // 800×600 is drawn at 1067×800; the artwork is 200×100 of the original
+  assert.ok(dims[0] < 400 && dims[1] < 200, `white margins trimmed (got ${dims})`);
+  assert.ok(Math.abs(dims[0] / dims[1] - 2) < 0.2, 'the artwork keeps its shape');
+
+  await waitForText(page.locator('#brand-pdf-size-out'), /mm/);
+  const before = await page.locator('#brand-pdf-size-out').innerText();
+  await page.locator('#brand-pdf-size').fill('200');
+  assert.equal(await page.locator('#brand-pdf-size-pct').innerText(), '200%');
+  await waitForText(page.locator('#brand-pdf-size-out'), { test: (t) => /mm/.test(t) && t !== before });
+  const [bw] = before.match(/\d+/).map(Number);
+  const [aw] = (await page.locator('#brand-pdf-size-out').innerText()).match(/\d+/).map(Number);
+  assert.ok(Math.abs(aw - bw * 2) <= 1, `PDF logo doubles in size (${before} → ${aw} mm)`);
+
+  await page.locator('#brand-video-size').fill('150');
+  assert.equal(await page.locator('#brand-video-size-pct').innerText(), '150%');
+  await page.uncheck('#brand-panel');
+
+  const pdf = await download(page, () => page.click('#ex-go'));
+  assert.ok(images(pdf) >= 2, 'the PDF includes the map and the logo');
+
+  // Remembered, and reset puts both back to 100%
+  await page.reload();
+  await page.waitForFunction(() => document.querySelectorAll('.ds-card').length === 3);
+  await page.click('#btn-export');
+  assert.equal(await page.inputValue('#brand-pdf-size'), '200');
+  assert.equal(await page.inputValue('#brand-video-size'), '150');
+  assert.equal(await page.isChecked('#brand-panel'), false);
+  await page.click('#brand-reset-size');
+  assert.equal(await page.inputValue('#brand-pdf-size'), '100');
+  assert.equal(await page.inputValue('#brand-video-size'), '100');
+  assert.deepEqual(page.errors, []);
+});
