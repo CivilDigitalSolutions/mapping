@@ -11,6 +11,8 @@ A progressive web app (PWA) for putting coordinate data on a map. Upload CSV fil
 - **Coordinate formats:** decimal degrees, N/S/E/W letters, degrees-minutes-seconds (`51°30'26"N`), degrees and decimal minutes (`51 30.43N`), separate latitude/longitude columns or one combined column (`"51.5, -0.12"`), and WKT `POINT(lon lat)`.
 - **Date/time formats:** ISO 8601, `DD/MM/YYYY` or `MM/DD/YYYY` (detected automatically, and you can change it), month names, 12- or 24-hour times, separate date and time columns, Unix timestamps and Excel date numbers.
 - **Per-dataset styling:** 9 marker shapes (circle, square, triangle, diamond, star, hexagon, cross, waypoint pin, flag), a colour-blind-friendly palette or any custom colour, and marker size.
+- **Split one file into many datasets:** choose a column such as Vehicle or Device when importing. Columns like these are suggested automatically, and each group becomes its own dataset with its own colour (and shape, after 10). *Show all / Hide all* in the panel helps with many datasets.
+- **Colour by value:** markers and route lines can be shaded by speed (worked out from times and distances, in mph, km/h or m/s), by time, or by any numeric column. The colour-blind-friendly scale (viridis) runs from the 2nd to the 98th percentile, so one bad reading can't flatten the colours. It appears on the dataset's card and in PDF and video legends, and popups show each point's speed. During replay the moving line uses the dataset's own colour, while the markers keep their value colours.
 - **Time-ordered tracks:** points are joined by date/time (or file order) with solid, dashed or dotted lines, direction arrows and optional sequence numbers on the markers.
 - **Point details:** date and time, coordinates (with a copy button), and the distance and time since the previous point, plus every other column from the row. *Previous* and *Next* buttons step along the track.
 - **Route replay:** a time slider plays the routes back. You can scrub to any moment, step from point to point, pick the speed (whole route in 15 s to 2 min, real time, or 1 min/10 min/1 hour/1 day per second), keep the whole trail or only the last 15 minutes, hour or day, and have the map follow the moving markers. Space plays and pauses, and Esc closes the replay.
@@ -84,6 +86,7 @@ js/icons.js           SVG marker shapes and palette
 js/replay.js          Route replay / time slider
 js/pointlayer.js      Canvas marker layer (fast drawing, hit-testing, keyboard targets)
 js/project.js         Project file save / open
+js/colour.js          Colour by value (speed, time, columns) and colour scale
 js/capture.js         Draws the map onto a canvas for exports
 js/exporters.js       Video recording and PDF report
 js/samples.js         Built-in sample datasets

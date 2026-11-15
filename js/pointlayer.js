@@ -7,6 +7,7 @@
 // which adds focusable buttons over the markers when few enough are in view.
 
 import { spriteFor, labelSpec, SHAPES } from './icons.js';
+import { BIN_COLOURS, NO_VALUE, NO_VALUE_COLOUR } from './colour.js';
 
 const CRS = L.CRS.EPSG3857;
 const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
@@ -17,7 +18,7 @@ export const PointLayer = L.Layer.extend({
   /**
    * @param {object} ds       dataset ({ id, name, style, points })
    * @param {Map} labels      point index -> sequence label (only when numbering is on)
-   * @param {object} [options]
+   * @param {object} [options] { colours } from computeColours() to colour each point by value
    */
   initialize(ds, labels, options) {
     L.setOptions(this, options);
@@ -107,8 +108,9 @@ export const PointLayer = L.Layer.extend({
    */
   async drawTo(ctx, cam) {
     const st = this.ds.style;
-    const sprite = spriteFor(st.shape, st.color, st.size, cam.scale);
-    await sprite.promise;
+    const set = this._spriteSet(cam.scale);
+    await set.promise;
+    const sprite = set.base;
     const W = ctx.canvas.width, H = ctx.canvas.height, pad = 60 * cam.scale;
     const occupied = occupancy(W + 2 * pad, H + 2 * pad, st.size * cam.scale);
     for (const i of this._order) {
@@ -117,12 +119,36 @@ export const PointLayer = L.Layer.extend({
       if (p.x < -pad || p.y < -pad || p.x > W + pad || p.y > H + pad) continue;
       if (!this.labels.size && occupied(p.x + pad, p.y + pad)) continue;
       const x = p.x / cam.scale, y = p.y / cam.scale;
-      ctx.drawImage(sprite.canvas, (x - sprite.ax) * cam.scale, (y - sprite.ay) * cam.scale, sprite.w * cam.scale, sprite.h * cam.scale);
-      this._drawLabel(ctx, i, x - sprite.ax + 4, y - sprite.ay + 4, cam.scale);
+      const sp = set.pick(i);
+      ctx.drawImage(sp.canvas, (x - sprite.ax) * cam.scale, (y - sprite.ay) * cam.scale, sprite.w * cam.scale, sprite.h * cam.scale);
+      this._drawLabel(ctx, i, x - sprite.ax + 4, y - sprite.ay + 4, cam.scale, set.colourOf(i));
     }
   },
 
   // ------------------------------------------------------------ internals
+
+  /**
+   * Marker images for this layer at `dpr`: one per colour band when colouring by
+   * value, otherwise just the dataset colour. pick(i) gives point i's image.
+   */
+  _spriteSet(dpr) {
+    const st = this.ds.style;
+    const colours = this.options.colours;
+    if (!colours) {
+      const s = spriteFor(st.shape, st.color, st.size, dpr);
+      return { ready: s.ready, promise: s.promise, base: s, pick: () => s, colourOf: () => st.color };
+    }
+    const list = BIN_COLOURS.map((c) => spriteFor(st.shape, c, st.size, dpr));
+    const none = spriteFor(st.shape, NO_VALUE_COLOUR, st.size, dpr);
+    const bins = colours.bins;
+    return {
+      ready: none.ready && list.every((s) => s.ready),
+      promise: Promise.all([none.promise, ...list.map((s) => s.promise)]),
+      base: none,
+      pick: (i) => (bins[i] === NO_VALUE ? none : list[bins[i]]),
+      colourOf: (i) => (bins[i] === NO_VALUE ? NO_VALUE_COLOUR : BIN_COLOURS[bins[i]]),
+    };
+  },
 
   _reset() {
     const map = this._map;
@@ -149,13 +175,14 @@ export const PointLayer = L.Layer.extend({
     const ctx = this._ctx;
     const st = this.ds.style;
     const dpr = this._dpr;
-    const sprite = spriteFor(st.shape, st.color, st.size, dpr);
+    const set = this._spriteSet(dpr);
+    const sprite = set.base;
     this._sprite = sprite;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
-    if (!sprite.ready) {
-      // First use of this marker style: draw as soon as its image is ready
-      sprite.promise.then(() => this.redraw());
+    if (!set.ready) {
+      // First use of this marker style: draw as soon as its images are ready
+      set.promise.then(() => this.redraw());
       this._drawnCount = 0;
       return;
     }
@@ -178,8 +205,8 @@ export const PointLayer = L.Layer.extend({
       const x = this._x0[i] * scale - ox, y = this._y0[i] * scale - oy;
       if (x < -m || y < -m || x > bw + m || y > bh + m) continue;
       if (!this.labels.size && occupied(x + m, y + m)) continue; // an identical marker is already drawn here
-      ctx.drawImage(sprite.canvas, x - sprite.ax, y - sprite.ay, sprite.w, sprite.h);
-      if (this.labels.size) this._drawLabel(ctx, i, x - sprite.ax + 4, y - sprite.ay + 4, 1);
+      ctx.drawImage(set.pick(i).canvas, x - sprite.ax, y - sprite.ay, sprite.w, sprite.h);
+      if (this.labels.size) this._drawLabel(ctx, i, x - sprite.ax + 4, y - sprite.ay + 4, 1, set.colourOf(i));
       this._drawn[c] = i; this._dx[c] = x; this._dy[c] = y; c++;
     }
     this._drawnCount = c;
@@ -187,12 +214,12 @@ export const PointLayer = L.Layer.extend({
   },
 
   /** Sequence number inside the marker; (left, top) is the marker's top-left in CSS px. */
-  _drawLabel(ctx, i, left, top, scale) {
+  _drawLabel(ctx, i, left, top, scale, colour) {
     const label = this.labels.get(i);
     if (label === undefined || label === null || label === '') return;
     const st = this.ds.style;
     const str = String(label);
-    const spec = labelSpec(st.shape, st.color, str);
+    const spec = labelSpec(st.shape, colour || st.color, str);
     const k = st.size / 32;
     ctx.save();
     ctx.font = `700 ${spec.fs * k * scale}px ${FONT}`;
