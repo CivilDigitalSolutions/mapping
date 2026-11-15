@@ -361,8 +361,11 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--brand); width:
   .dialog-body { flex: 1; }
   .dialog-foot { border-radius: 0; }
 }
-@media (max-width: 420px) {
+/* Phones: the app name doesn't fit beside the buttons, and "Add data" becomes just "+" */
+@media (max-width: 560px) {
   .brand h1 { display: none; }
+}
+@media (max-width: 480px) {
   .hide-xs { display: none; }
 }
 .btn { white-space: nowrap; }
@@ -533,10 +536,10 @@ textarea.plain { font-family: inherit; font-size: inherit; }
 /* Stops / problems summary on a dataset card */
 .ds-events { margin: .5rem 0 0; font-size: .84rem; color: var(--ink-2); }
 
-/* Stop / gap / jump badges on the map */
+/* Stop / gap / jump symbols on the map (small, no boxes) */
 .dm-event { background: none; border: none; cursor: pointer; }
 .dm-event svg { display: block; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
-.dm-event:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 12px; }
+.dm-event:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
 
 /* "Your branding" in the Export dialog */
 .brand-group { display: grid; gap: .6rem; }

@@ -6,7 +6,10 @@
 //    at least `stopMinutes`. (A long silence between two points in the same place
 //    counts as a stop too: many trackers send less often when parked.)
 //  - Gap: nothing recorded for at least `gapMinutes` while the position moved more
-//    than `stopRadius`, so we don't know the route taken in between.
+//    than `stopRadius`, so we don't know the route taken in between. It must also
+//    be at least GAP_FACTOR times the dataset's usual time between points, so data
+//    that's recorded sparsely on purpose (e.g. a survey every 30 minutes) isn't
+//    flagged at every step.
 //  - Jump: the speed needed to get from one point to the next is faster than
 //    `jumpSpeed`, which usually means a bad GPS reading. Short hops (under 200 m)
 //    are ignored, because a few metres of GPS wobble over a second can look fast.
@@ -28,6 +31,7 @@ export const DEFAULT_ANALYSIS = {
 };
 
 const MIN_JUMP_DISTANCE = 200; // metres
+export const GAP_FACTOR = 3;   // a gap is at least this many times the usual interval
 
 /**
  * @param {Array} points  the dataset's points ({ lat, lon, t })
@@ -90,7 +94,12 @@ export function analyse(points, order, opts = {}) {
   }
 
   // ---- Gaps: long silences while on the move
-  const gapMs = o.gapMinutes * 60000;
+  // The usual time between points (median), so sparse-on-purpose data isn't all "gaps"
+  const intervals = [];
+  for (let n = 1; n < good.length; n++) intervals.push(points[good[n]].t - points[good[n - 1]].t);
+  intervals.sort((x, y) => x - y);
+  const usual = intervals.length ? intervals[Math.floor(intervals.length / 2)] : 0;
+  const gapMs = Math.max(o.gapMinutes * 60000, usual * GAP_FACTOR);
   for (let n = 1; n < good.length; n++) {
     const a = good[n - 1], b = good[n];
     const ms = points[b].t - points[a].t;

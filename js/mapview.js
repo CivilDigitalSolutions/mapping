@@ -7,7 +7,7 @@ import { binColour, computeColours, getScale, setScale } from './colour.js';
 import { BASEMAPS, DEFAULT_VIEW } from './config.js';
 import { bearing, distanceMetres, formatCoord } from './coords.js';
 import { displayTimeZone, formatDateTime, formatDistance, formatDuration } from './dates.js';
-import { anchorFor, arrowSvg, eventBadge, markerSvg } from './icons.js';
+import { anchorFor, arrowSvg, eventIcon, markerSvg } from './icons.js';
 import { PointLayer, popupOffset } from './pointlayer.js';
 import { createReplay } from './replay.js';
 import * as store from './store.js';
@@ -38,7 +38,7 @@ map.createPane('arrows').style.zIndex = 420;
 
 map.createPane('dmPoints').style.zIndex = 590;      // canvas markers (replay heads at 600 sit on top)
 
-map.createPane('dmEvents').style.zIndex = 645;      // stop / gap / jump badges: above the keyboard targets so they can be clicked
+map.createPane('dmEvents').style.zIndex = 645;      // stop / gap / jump symbols: above the keyboard targets so they can be clicked
 
 map.createPane('dmFocus').style.zIndex = 640;       // invisible keyboard targets over the markers
 
@@ -128,16 +128,16 @@ export function refreshAll() {
 
 const MAX_EVENTS = 300; // per kind, per dataset, so a very messy file can't swamp the map
 
-function eventMarker(kind, latlng, text, title, popup) {
-  const { svg, w, h } = eventBadge(kind, text);
-  const above = kind !== 'gap'; // stop and jump badges float just above the spot
+/** A small clickable, keyboard-reachable symbol for a stop, gap or jump (see eventIcon). */
+function eventMarker(kind, latlng, iconOpts, title, popup) {
+  const { svg, w, h, anchor } = eventIcon(kind, iconOpts);
   return L.marker(latlng, {
     pane: 'dmEvents',
     keyboard: true,
     title,
     alt: title,
     riseOnHover: true,
-    icon: L.divIcon({ className: `dm-event dm-event-${kind}`, html: svg, iconSize: [w, h], iconAnchor: [w / 2, above ? h + 12 : h / 2] }),
+    icon: L.divIcon({ className: `dm-event dm-event-${kind}`, html: svg, iconSize: [w, h], iconAnchor: anchor }),
   }).bindPopup(popup, { maxWidth: 300, minWidth: 220 });
 }
 
@@ -153,7 +153,7 @@ function eventPopup(title, sub, rows, action) {
   return el;
 }
 
-/** Add badges (and dashed lines for gaps) to the dataset's group. Returns [{ kind, item, marker }]. */
+/** Add stop / gap / jump symbols to the dataset's group. Returns [{ kind, item, marker }]. */
 function drawEvents(ds, { stops, gaps, jumps }, group) {
   const out = [];
   const unit = SPEED_UNITS[prefs.analysis.speedUnit] || SPEED_UNITS.mph;
@@ -161,7 +161,7 @@ function drawEvents(ds, { stops, gaps, jumps }, group) {
 
   for (const s of stops.slice(0, MAX_EVENTS)) {
     const dur = formatDuration(s.minutes * 60000);
-    const m = eventMarker('stop', [s.lat, s.lon], dur, `${ds.name}: stopped for ${dur}, ${formatDateTime(s.from)} to ${formatDateTime(s.to)}`,
+    const m = eventMarker('stop', [s.lat, s.lon], { label: dur }, `${ds.name}: stopped for ${dur}, ${formatDateTime(s.from)} to ${formatDateTime(s.to)}`,
       () => eventPopup(`Stopped for ${dur}`, ds.name, [
         ['From', formatDateTime(s.from)], ['To', formatDateTime(s.to)], ['Points recorded', String(s.count)], ['Where', formatCoord(s.lat, s.lon)],
       ]));
@@ -170,19 +170,19 @@ function drawEvents(ds, { stops, gaps, jumps }, group) {
   }
   for (const g of gaps.slice(0, MAX_EVENTS)) {
     const dur = formatDuration(g.minutes * 60000);
-    L.polyline([at(g.a), at(g.b)], { pane: 'tracks', color: '#5b6472', weight: 3, opacity: 0.9, dashArray: '2 8', lineCap: 'round', interactive: false }).addTo(group);
+    // A small break across the middle of the line, turned to match its direction
     const a = at(g.a), b = at(g.b);
-    const m = eventMarker('gap', [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], `No data ${dur}`, `${ds.name}: nothing recorded for ${dur}, ${formatDateTime(g.from)} to ${formatDateTime(g.to)}`,
+    const m = eventMarker('gap', [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], { angle: bearing(a, b) }, `${ds.name}: nothing recorded for ${dur}, ${formatDateTime(g.from)} to ${formatDateTime(g.to)}`,
       () => eventPopup(`Nothing recorded for ${dur}`, ds.name, [
         ['From', formatDateTime(g.from)], ['To', formatDateTime(g.to)], ['Distance between', formatDistance(g.metres)],
-        ['Note', 'The route taken during this time is not known. The dashed line just joins the two ends.'],
+        ['Note', 'The route taken during this time is not known. The line just joins the two ends.'],
       ]));
     m.addTo(group);
     out.push({ kind: 'gap', item: g, marker: m });
   }
   for (const j of jumps.slice(0, MAX_EVENTS)) {
     const speed = `${Math.round(j.speed).toLocaleString()} ${unit.label}`;
-    const m = eventMarker('jump', at(j.i), 'Jump', `${ds.name}: possible GPS jump at ${formatDateTime(ds.points[j.i].t)}`,
+    const m = eventMarker('jump', at(j.i), {}, `${ds.name}: possible GPS jump at ${formatDateTime(ds.points[j.i].t)}`,
       () => eventPopup('Possible GPS jump', ds.name, [
         ['When', formatDateTime(ds.points[j.i].t)],
         ['From the previous point', `${formatDistance(j.metres)} in ${formatDuration(j.seconds * 1000)}`],
@@ -406,7 +406,7 @@ map.on('moveend zoomend', scheduleFocusTargets);
 // Accessible popups: move focus in when opened from the keyboard, and back out when closed.
 export let popupOpenerKey = null;
 
-let popupOpenerEl = null; // a stop / gap / jump badge that opened the popup from the keyboard
+let popupOpenerEl = null; // a stop / gap / jump symbol that opened the popup from the keyboard
 
 map.on('popupopen', (e) => {
   const active = document.activeElement;

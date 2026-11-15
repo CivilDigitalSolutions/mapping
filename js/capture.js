@@ -203,7 +203,7 @@ export async function drawOverlays(ctx, map, cam) {
       if (cls.includes('dm-arrow')) arrows.push(l);
       else if (cls.includes('dm-head')) heads.push(l);
       else if (cls.includes('dm-marker')) markers.push(l);
-      else if (cls.includes('dm-event')) events.push(l); // stop / gap / jump badges
+      else if (cls.includes('dm-event')) events.push(l); // stop / gap / jump symbols
     }
   });
   const pad = 60 * scale;
