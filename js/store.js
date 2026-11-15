@@ -57,6 +57,27 @@ export async function requestPersistence() {
   }
 }
 
+/**
+ * How much this site is using and is allowed to use, as reported by the browser.
+ * Returns { usage, quota, tiles, data } in bytes (tiles/data are null when the
+ * browser doesn't break the total down), or null if the browser can't say.
+ */
+export async function usage() {
+  try {
+    if (!navigator.storage?.estimate) return null;
+    const e = await navigator.storage.estimate();
+    const d = e.usageDetails || null; // Chrome / Edge only
+    return {
+      usage: e.usage || 0,
+      quota: e.quota || 0,
+      tiles: d ? d.caches || 0 : null,
+      data: d ? d.indexedDB || 0 : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function isPersisted() {
   try { return !!(await navigator.storage?.persisted?.()); } catch { return false; }
 }

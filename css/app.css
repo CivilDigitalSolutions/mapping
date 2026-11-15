@@ -488,3 +488,6 @@ textarea.plain { font-family: inherit; font-size: inherit; }
   padding: .35rem .7rem; font: inherit; font-weight: 700; cursor: pointer; min-height: 36px;
 }
 .toast-action:hover { background: rgba(255,255,255,.12); }
+
+.storage-usage { margin: -.25rem 0 .6rem; font-size: .82rem; color: var(--ink-2); }
+.storage-usage strong { color: var(--ink); }
