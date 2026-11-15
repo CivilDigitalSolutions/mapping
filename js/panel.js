@@ -7,7 +7,7 @@ import { displayTimeZone, formatDateTime, formatDuration, setDisplayTimeZone } f
 import { summarise } from './analysis.js';
 import { markerSvg } from './icons.js';
 import * as store from './store.js';
-import { fitDataset, map, removeLayers, renderDataset, replay, scheduleFocusTargets } from './mapview.js';
+import { fitDataset, map, redrawShared, removeLayers, renderDataset, replay, scheduleFocusTargets } from './mapview.js';
 import { openProjectText, saveProjectFile } from './project-ui.js';
 import { openSettings } from './settings.js';
 import { datasets, layers, prefs, save, saveFailed, savePrefs, timeRange } from './state.js';
@@ -111,6 +111,7 @@ export function scaleHtml(ds) {
       <span class="ds-scale-title">${esc(s.title)}</span>
       <span class="ds-scale-bar" style="background:${RAMP_CSS}" aria-hidden="true"></span>
       <span class="ds-scale-ends"><span>${s.clipped ? '≤ ' : ''}${esc(s.format(s.min))}</span><span>${s.clipped ? '≥ ' : ''}${esc(s.format(s.max))}</span></span>
+      ${s.shared ? `<span class="ds-scale-shared">Same scale as ${s.shared === 1 ? 'the other dataset' : `the other ${s.shared} datasets`} coloured this way</span>` : ''}
       ${missing ? '<span class="ds-scale-missing"><span class="ds-scale-swatch" aria-hidden="true"></span>Grey: no value</span>' : ''}
     </div>`;
 }
@@ -120,6 +121,7 @@ export function removeDataset(ds) {
   removeLayers(ds.id);
   datasets.splice(index, 1);
   map.closePopup();
+  redrawShared();
   renderList();
   save();
   const undoBtn = toast(`Removed "${ds.name}".`, 'info', {

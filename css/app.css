@@ -260,7 +260,7 @@ body.is-dragging .map { outline: 4px dashed var(--brand); outline-offset: -12px;
 /* forms */
 .field { margin-bottom: .85rem; min-width: 0; }
 .field-label { display: block; font-weight: 600; margin-bottom: .3rem; }
-input[type="text"], select, textarea {
+input[type="text"], input[type="search"], select, textarea {
   width: 100%; min-height: 40px; padding: .45rem .6rem;
   border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink);
   font: inherit;
@@ -558,3 +558,23 @@ textarea.plain { font-family: inherit; font-size: inherit; }
 .brand-size input[type="range"] { width: 100%; }
 .brand-mock { width: 100%; max-width: 320px; height: auto; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
 #brand-reset-size { justify-self: start; }
+.ds-scale-shared { color: var(--ink-2); }
+
+/* Points table: search, select, delete and edit */
+.table-tools { display: grid; gap: .5rem; margin-bottom: .6rem; }
+.table-tools-row { display: flex; flex-wrap: wrap; align-items: end; gap: .6rem 1rem; }
+.table-search { flex: 1 1 260px; margin: 0; }
+.table-search input { width: 100%; }
+.table-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.table-tools .hint { margin: 0; }
+.table-undo { display: flex; align-items: center; gap: .6rem; padding: .4rem .6rem; border-radius: 8px; background: var(--brand-soft); }
+.table-status { margin: 0; font-size: .85rem; color: var(--ink-2); }
+.table-pager { display: flex; align-items: center; justify-content: center; gap: .75rem; margin-top: -.4rem; font-size: .9rem; }
+.data-table .sort-btn { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: .25rem; }
+.data-table .sort-btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+.data-table .sort-ind { font-size: .75em; color: var(--ink-2); min-width: .8em; }
+.data-table td.sel, .data-table th.sel { width: 2rem; padding-right: 0; }
+.data-table tr.is-selected { background: var(--brand-soft); }
+.data-table .row-actions { display: flex; gap: .3rem; }
+.field-error { margin: .25rem 0 0; color: var(--err); font-size: .85rem; font-weight: 600; }
+.dialog-foot .spacer { flex: 1; }

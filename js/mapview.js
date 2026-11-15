@@ -3,7 +3,7 @@
 // markers), popups, hover labels, clicking, keyboard targets over markers,
 // zooming to data, and adding a dataset to the map.
 
-import { binColour, computeColours, getScale, setScale } from './colour.js';
+import { binColour, colourKey, computeColours, getScale, setScale } from './colour.js';
 import { BASEMAPS, DEFAULT_VIEW } from './config.js';
 import { bearing, distanceMetres, formatCoord } from './coords.js';
 import { displayTimeZone, formatDateTime, formatDistance, formatDuration } from './dates.js';
@@ -49,7 +49,33 @@ export const replay = createReplay({ map, getDatasets: () => datasets, layers, a
 // Lines coloured by value are drawn on canvas: there can be thousands of short runs
 export const colourLineRenderer = L.canvas({ padding: 0.2, pane: 'tracks' });
 
+/** The datasets whose colours share one scale with `ds` (just `ds` when sharing is off). */
+function colourGroup(ds) {
+  if (!prefs.sharedScale || colourKey(ds) === 'none') return [ds];
+  return [ds, ...datasets.filter((d) => d !== ds && colourKey(d) === colourKey(ds))];
+}
+
+/** Redraw a dataset, and any others whose shared colour scale may have changed with it. */
 export function renderDataset(ds) {
+  drawDataset(ds);
+  redrawShared(ds);
+}
+
+let wasShared = null;
+/** Redraw the datasets coloured by value (their shared scales may have changed, or sharing was switched off). */
+export function redrawShared(except = null) {
+  const switched = wasShared !== null && wasShared !== prefs.sharedScale;
+  wasShared = prefs.sharedScale;
+  if (!prefs.sharedScale && !switched) return;
+  for (const d of datasets) if (d !== except && colourKey(d) !== 'none' && layers.has(d.id)) drawDataset(d);
+}
+
+/** Draw every dataset once. */
+export function renderAll() {
+  datasets.forEach(drawDataset);
+}
+
+function drawDataset(ds) {
   removeLayers(ds.id);
   const group = L.featureGroup();
   // The filter decides which points take part: they're the only ones drawn,
@@ -61,7 +87,7 @@ export function renderDataset(ds) {
   const seqPos = new Map(order.map((pi, k) => [pi, k]));
   const st = ds.style;
   // Colour by value (speed, time or a column), if chosen
-  const colours = computeColours(ds);
+  const colours = computeColours(ds, colourGroup(ds));
   setScale(ds, colours);
   // A leg is coloured by the point it arrives at (for speed, that's the leg's own speed)
   const legColour = (k) => (colours ? binColour(colours.bins[order[k + 1]]) : st.color);
@@ -120,7 +146,7 @@ export function renderDataset(ds) {
 /** Redraw every dataset (after the filter or the stop / jump settings change). */
 export function refreshAll() {
   map.closePopup();
-  datasets.forEach(renderDataset);
+  renderAll();
   changed();
 }
 

@@ -3,7 +3,7 @@
 import { trackEvent } from './analytics.js';
 import { deviceTimeZone, isValidTimeZone, setDisplayTimeZone } from './dates.js';
 import { buildProject, readProject } from './project.js';
-import { fitAll, removeLayers, renderDataset, replay } from './mapview.js';
+import { fitAll, removeLayers, renderAll, replay } from './mapview.js';
 import { changed, datasets, defaultStyle, prefs, save, savePrefs } from './state.js';
 import { fillZoneSelect } from './style-controls.js';
 import { $, announce, choiceDialog, download, toast, uid } from './util.js';
@@ -47,8 +47,8 @@ export async function openProjectText(text, fileName = 'project file') {
   for (const ds of project.datasets) {
     ds.id = uid();
     datasets.push(ds);
-    renderDataset(ds);
   }
+  renderAll();
   if (project.displayTimeZone !== null && mode === 'replace') {
     prefs.displayTz = isValidTimeZone(project.displayTimeZone) ? project.displayTimeZone : '';
     setDisplayTimeZone(prefs.displayTz);

@@ -64,6 +64,9 @@ export function openExport(kind = 'pdf') {
     : !replay.hasTimedData()
       ? 'Needs data with dates and times.'
       : `The routes moving over time, with the date and time on screen. Saved as ${support.ext.toUpperCase()}.`;
+  $('#video-speed-hint').textContent = support?.fast
+    ? 'Videos are made faster than they play, usually in a fraction of their length. Keep this tab open until it finishes.'
+    : 'Recording takes as long as the video itself in this browser. Keep this tab open while it records.';
   $(`[name="exportkind"][value="${kind === 'video' && canVideo() ? 'video' : 'pdf'}"]`).checked = true;
   $('#ex-trail').value = replay.trail || 'all';
   fillFollowTargets();
@@ -141,7 +144,7 @@ export async function runExport() {
         },
         onProgress: exportProgress,
       });
-      if (!res) { exportProgress(0, 'Recording stopped.'); return; }
+      if (!res) { exportProgress(0, 'Video cancelled.'); return; }
       downloadBlob(`${base}.${res.ext}`, res.blob);
       exportDlg.close();
       toast(res.tilesOk ? 'Video saved to your downloads.' : "Video saved, but the map background couldn't be included.");

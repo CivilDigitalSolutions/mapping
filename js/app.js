@@ -9,7 +9,7 @@ import { SAMPLES } from './samples.js';
 import * as store from './store.js';
 import './export-ui.js'; // sets up the Export dialog (PDF / video)
 import { loadSamples, openImport } from './import-flow.js';
-import { baseLayers, fitAll, map, renderDataset, replay } from './mapview.js';
+import { baseLayers, fitAll, map, renderAll, replay } from './mapview.js';
 import { panel, panelBtn, renderList, updateStorageStatus, updateStorageUsage } from './panel.js';
 import { saveProjectFile } from './project-ui.js';
 import { completePrefs, datasets, hooks, onChange, prefs } from './state.js';
@@ -46,7 +46,7 @@ $('#btn-sample-csv').addEventListener('click', () => download('sample-track.csv'
   const saved = await store.get('datasets');
   if (Array.isArray(saved) && saved.length) {
     datasets.push(...saved);
-    datasets.forEach(renderDataset);
+    renderAll();
     fitAll();
   }
   renderList();

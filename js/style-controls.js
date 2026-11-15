@@ -2,6 +2,7 @@
 // dialog, and the time zone picker.
 
 import { colourByOptions } from './colour.js';
+import { prefs, savePrefs } from './state.js';
 import { deviceTimeZone, timeZoneList } from './dates.js';
 import { PALETTE, SHAPES, SHAPE_KEYS, markerSvg } from './icons.js';
 import { $, $$, esc } from './util.js';
@@ -72,7 +73,10 @@ export function renderStyleControls(container, style, onChange, prefix, points =
         </select>
       </div>
     </div>
-    <p class="hint" data-colourby-hint>Low values are dark purple, high values are yellow. The colour chosen above is still used for the dataset's legend icon and its line during replay.</p>
+    <div data-colourby-hint>
+      <p class="hint">Low values are dark purple, high values are yellow. The colour chosen above is still used for the dataset's legend icon and its line during replay.</p>
+      <label class="tool-check"><input type="checkbox" data-shared-scale ${prefs.sharedScale ? 'checked' : ''}> Use one scale for every dataset coloured this way, so a colour means the same value on each</label>
+    </div>
     <div class="grid-2">
       <div class="field">
         <label class="field-label" for="${prefix}-size">Marker size <span class="muted" data-out="size">${style.size}px</span></label>
@@ -123,6 +127,7 @@ export function renderStyleControls(container, style, onChange, prefix, points =
     else if (t.name === `${prefix}-color`) { style.color = t.value; $('[data-k="customColor"]', container).value = t.value; }
     else if (t.dataset.k === 'customColor') { style.color = t.value; $$(`[name="${prefix}-color"]`, container).forEach((r) => { r.checked = r.value.toLowerCase() === t.value.toLowerCase(); }); }
     else if (t.dataset.k === 'size') style.size = Number(t.value);
+    else if (t.matches('[data-shared-scale]')) { prefs.sharedScale = t.checked; savePrefs(); }
     else if (t.type === 'checkbox' && t.dataset.k) style[t.dataset.k] = t.checked;
     else if (t.tagName === 'SELECT' && t.dataset.k) style[t.dataset.k] = t.value;
     else return;
