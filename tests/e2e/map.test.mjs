@@ -77,6 +77,34 @@ test('colouring by a column and by time, on a split fleet file', async () => {
   await waitForText(page.locator('.ds-card').nth(1).locator('.ds-scale'), /Time\s+08:\d\d GMT\s+08:\d\d GMT/);
 });
 
+test('split datasets share one colour scale, which can be switched off', async () => {
+  const page = await openApp(browser, server);
+  // VAN-02 drives twice as fast as the others
+  const csv = fleetCsv().replace(/^(VAN-02,.*,)(\d+)$/gm, (m, a, v) => a + v * 2);
+  await chooseFile(page, writeTemp('fleet2.csv', csv));
+  await page.selectOption('#imp-colourby', 'col:Recorded speed (mph)');
+  await finishImport(page, 3);
+  await page.waitForFunction(() => document.querySelectorAll('.ds-scale').length === 3);
+  const ends = () => page.locator('.ds-scale-ends').allInnerTexts();
+  await waitForText(page.locator('.ds-scale').first(), /Same scale as the other 2 datasets/);
+  const shared = await ends();
+  assert.equal(new Set(shared).size, 1, `all three use the same range: ${JSON.stringify(shared)}`);
+  assert.match(shared[0], /6\s+68/, 'from the slowest to the fastest van');
+
+  await page.locator('.ds-card').first().locator('[data-act=settings]').click();
+  await page.uncheck('#set-style [data-shared-scale]');
+  await page.click('#settings-form button[type=submit]');
+  await page.waitForFunction(() => !document.querySelector('.ds-scale-shared'));
+  const own = await ends();
+  assert.ok(new Set(own).size > 1, `each has its own range now: ${JSON.stringify(own)}`);
+
+  // Remembered after a reload
+  await page.reload();
+  await page.waitForFunction(() => document.querySelectorAll('.ds-scale').length === 3);
+  assert.equal(await page.locator('.ds-scale-shared').count(), 0);
+  assert.deepEqual(page.errors, []);
+});
+
 test('show all / hide all', async () => {
   const page = await openApp(browser, server);
   await loadSamples(page);

@@ -10,7 +10,7 @@ after(async () => { await browser.close(); await server.close(); });
 
 const isVideo = (b) => b.subarray(4, 8).toString('latin1') === 'ftyp' || b.readUInt32BE(0) === 0x1a45dfa3; // MP4 or WebM
 
-/** Videos record in real time, so the tests use a 3-second length. */
+/** The tests use a 3-second video, so the real-time fallback stays quick too. */
 async function recordVideo(page, camera, extra = async () => {}) {
   await page.click('#btn-export');
   await page.check('[name=exportkind][value=video]');
@@ -41,7 +41,7 @@ test('video with a fixed camera; the map is locked while recording', async () =>
   const page = await openApp(browser, server);
   await loadSamples(page);
   const pending = recordVideo(page, 'fit');
-  await page.waitForFunction(() => /Recording/.test(document.getElementById('ex-status')?.textContent || ''));
+  await page.waitForFunction(() => /Recording|Making the video/.test(document.getElementById('ex-status')?.textContent || ''));
   assert.equal(await page.locator('.leaflet-container.is-frozen').count(), 1);
   const video = await pending;
   assert.ok(isVideo(video.bytes), 'an MP4 or WebM file');
@@ -68,10 +68,40 @@ test('stopping a recording part-way saves nothing', async () => {
   await page.click('#btn-export');
   await page.check('[name=exportkind][value=video]');
   await page.click('#ex-go');
-  await page.waitForFunction(() => /Recording/.test(document.getElementById('ex-status')?.textContent || ''));
+  await page.waitForFunction(() => /Recording|Making the video/.test(document.getElementById('ex-status')?.textContent || ''));
   await page.click('#ex-cancel');
-  await page.waitForFunction(() => /Recording stopped/.test(document.getElementById('ex-status')?.textContent || ''));
+  await page.waitForFunction(() => /Video cancelled/.test(document.getElementById('ex-status')?.textContent || ''));
   assert.equal(await page.locator('#dlg-export').evaluate((d) => d.open), true);
+});
+
+test('videos are made faster than they play, as H.264 MP4', async () => {
+  const page = await openApp(browser, server);
+  await loadSamples(page);
+  await page.click('#btn-export');
+  await page.check('[name=exportkind][value=video]');
+  assert.match(await page.locator('#video-speed-hint').innerText(), /faster than they play/);
+  await page.selectOption('#ex-length', '30');
+  const t0 = Date.now();
+  const video = await download(page, () => page.click('#ex-go'), 60000);
+  const secs = (Date.now() - t0) / 1000;
+  const text = video.bytes.toString('latin1');
+  assert.ok(isVideo(video.bytes) && /avc1/.test(text) && /moov/.test(text), 'an H.264 MP4');
+  assert.match(video.name, /\.mp4$/);
+  // 33 s of video (1 s lead-in + 30 s + 2 s hold)
+  assert.ok(secs < 30, `took ${secs.toFixed(1)} s for a 33 s video`);
+  console.log(`# 33 s video made in ${secs.toFixed(1)} s`);
+  assert.deepEqual(page.errors, []);
+});
+
+test('browsers without fast encoding still record in real time', async () => {
+  const page = await openApp(browser, server);
+  await loadSamples(page);
+  await page.evaluate(() => { window.__noFastVideo = true; });
+  const pending = recordVideo(page, 'fit');
+  await page.waitForFunction(() => /Recording/.test(document.getElementById('ex-status')?.textContent || ''));
+  const video = await pending;
+  assert.ok(isVideo(video.bytes));
+  assert.deepEqual(page.errors, []);
 });
 
 test('per-dataset GeoJSON and CSV exports', async () => {

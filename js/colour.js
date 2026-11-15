@@ -75,14 +75,15 @@ const SPEED_UNITS = {
   ms: { label: 'm/s', perMs: 1000 },
 };
 
-/**
- * Work out each point's value and colour band.
- * Returns null for "none", otherwise
- * { bins: Uint8Array, values: Float64Array, min, max, title, format(v) }.
- */
-export function computeColours(ds) {
+/** What a dataset is coloured by, e.g. "speed:mph", "time", "col:Speed" or "none". Datasets with the same key can share a scale. */
+export function colourKey(ds) {
   const by = ds.style.colourBy || 'none';
-  if (by === 'none') return null;
+  return by === 'speed' ? `speed:${SPEED_UNITS[ds.style.speedUnit] ? ds.style.speedUnit : 'kmh'}` : by;
+}
+
+/** Each point's value: { values: Float64Array, title, format } or null for "none". */
+function valuesOf(ds) {
+  const by = ds.style.colourBy || 'none';
   const pts = ds.points;
   const n = pts.length;
   const values = new Float64Array(n).fill(NaN);
@@ -103,7 +104,7 @@ export function computeColours(ds) {
   } else if (by === 'time') {
     for (let i = 0; i < n; i++) if (pts[i].t != null) values[i] = pts[i].t;
     title = 'Time';
-    format = null; // chosen below, once the range is known
+    format = null; // chosen once the range is known
   } else if (by.startsWith('col:')) {
     const key = by.slice(4);
     for (let i = 0; i < n; i++) {
@@ -115,18 +116,45 @@ export function computeColours(ds) {
   } else {
     return null;
   }
+  return { values, title, format };
+}
 
-  // Scale from the 2nd to the 98th percentile so one bad reading can't flatten the colours
-  const sorted = Array.from(values).filter(Number.isFinite).sort((a, b) => a - b);
-  if (!sorted.length && !format) format = (v) => String(v);
-  if (!sorted.length) return { bins: new Uint8Array(n).fill(NO_VALUE), values, min: NaN, max: NaN, title, format, clipped: false };
+/**
+ * The scale's range for some values: from the 2nd to the 98th percentile
+ * (so one bad reading can't flatten the colours), or null if there are none.
+ */
+function rangeOf(valueArrays) {
+  const sorted = [];
+  for (const vs of valueArrays) for (const v of vs) if (Number.isFinite(v)) sorted.push(v);
+  if (!sorted.length) return null;
+  sorted.sort((a, b) => a - b);
   const pick = (q) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(q * (sorted.length - 1))))];
   const clip = sorted.length > 50;
   const min = clip ? pick(0.02) : sorted[0];
   const max = clip ? pick(0.98) : sorted[sorted.length - 1];
+  return { min, max, lo: sorted[0], hi: sorted[sorted.length - 1] };
+}
+
+/**
+ * Work out each point's value and colour band.
+ * `group` is the datasets sharing one scale (including `ds`); by default just `ds`.
+ * Returns null for "none", otherwise
+ * { bins: Uint8Array, values: Float64Array, min, max, title, format(v), clipped, shared }.
+ * `shared` is how many other datasets use the same scale.
+ */
+export function computeColours(ds, group = [ds]) {
+  const own = valuesOf(ds);
+  if (!own) return null;
+  const { values, title } = own;
+  const n = values.length;
+  const others = group.filter((d) => d !== ds && colourKey(d) === colourKey(ds));
+  const range = rangeOf([values, ...others.map((d) => valuesOf(d).values)]);
+  let format = own.format;
+  if (!range) return { bins: new Uint8Array(n).fill(NO_VALUE), values, min: NaN, max: NaN, title, format: format || String, clipped: false, shared: others.length };
+  const { min, max } = range;
   if (!format) {
     // Times: just the time of day if everything is within a day, otherwise date and time
-    const withDate = sorted[sorted.length - 1] - sorted[0] >= 86400000;
+    const withDate = range.hi - range.lo >= 86400000;
     format = (v) => formatShort(v, withDate);
   }
   const span = max - min || 1;
@@ -135,7 +163,7 @@ export function computeColours(ds) {
     const v = values[i];
     bins[i] = Number.isFinite(v) ? Math.min(BINS - 1, Math.max(0, Math.floor(((v - min) / span) * BINS))) : NO_VALUE;
   }
-  return { bins, values, min, max, title, format, clipped: clip && (sorted[0] < min || sorted[sorted.length - 1] > max) };
+  return { bins, values, min, max, title, format, clipped: range.lo < min || range.hi > max, shared: others.length };
 }
 
 export function binColour(bin, fallback = NO_VALUE_COLOUR) {

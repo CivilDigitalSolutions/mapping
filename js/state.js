@@ -19,6 +19,7 @@ export const DEFAULT_SPEED_UNIT = /^en-(GB|US)$/i.test(globalThis.navigator?.lan
 
 export const prefs = {
   basemap: 'osm', displayTz: '', lastImportTz: '', lastBackup: 0, lastChange: 0,
+  sharedScale: true, // datasets coloured the same way share one colour scale
   filter: { ...EMPTY_FILTER },
   analysis: { ...DEFAULT_ANALYSIS, speedUnit: DEFAULT_SPEED_UNIT, jumpSpeed: DEFAULT_SPEED_UNIT === 'mph' ? 150 : 240 },
   branding: { logo: '', logoW: 0, logoH: 0, name: '', extras: true, pdfSize: 1, videoSize: 1, panel: true, trimmed: false },
@@ -32,6 +33,7 @@ export function completePrefs() {
   prefs.filter = { ...EMPTY_FILTER, ...(prefs.filter || {}) };
   prefs.analysis = { ...DEFAULT_ANALYSIS, speedUnit: DEFAULT_SPEED_UNIT, ...(prefs.analysis || {}) };
   prefs.branding = { ...DEFAULT_BRANDING, ...(prefs.branding || {}) };
+  if (typeof prefs.sharedScale !== 'boolean') prefs.sharedScale = true;
 }
 
 let saveTimer = 0;

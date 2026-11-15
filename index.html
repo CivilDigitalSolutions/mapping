@@ -369,11 +369,78 @@
         <button type="button" class="icon-btn" data-close aria-label="Close">✕</button>
       </header>
       <div class="dialog-body">
+        <div id="table-tools" class="table-tools" hidden>
+          <div class="table-tools-row">
+            <div class="field table-search">
+              <label for="tbl-search" class="field-label">Search points</label>
+              <input type="search" id="tbl-search" placeholder="Name, date, coordinates or any column" autocomplete="off">
+            </div>
+            <div class="table-actions">
+              <button type="button" class="btn btn-sm" id="tbl-select-all">Select all matching</button>
+              <button type="button" class="btn btn-sm" id="tbl-select-none" disabled>Clear selection</button>
+              <button type="button" class="btn btn-sm btn-ghost-danger" id="tbl-delete" disabled>Delete selected</button>
+            </div>
+          </div>
+          <p class="hint" id="tbl-filter-row" hidden>
+            <span id="tbl-filter-text"></span>
+            <button type="button" class="link-btn" id="tbl-delete-hidden"></button>
+          </p>
+          <div class="table-undo" id="tbl-undo-row" role="status" hidden>
+            <span id="tbl-undo-text"></span>
+            <button type="button" class="btn btn-sm" id="tbl-undo">Undo</button>
+          </div>
+          <p class="table-status" id="tbl-status" aria-live="polite"></p>
+        </div>
         <div class="preview-wrap tall">
           <table class="preview data-table" id="data-table"></table>
         </div>
+        <nav class="table-pager" id="tbl-pager" aria-label="Table pages" hidden>
+          <button type="button" class="btn btn-sm" id="tbl-prev">◀ Previous</button>
+          <span id="tbl-page"></span>
+          <button type="button" class="btn btn-sm" id="tbl-next">Next ▶</button>
+        </nav>
       </div>
     </div>
+  </dialog>
+
+  <dialog id="dlg-point" class="dialog" aria-labelledby="point-title">
+    <form method="dialog" class="dialog-inner" id="point-form" novalidate>
+      <header class="dialog-head">
+        <h2 id="point-title">Edit point</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Close">✕</button>
+      </header>
+      <div class="dialog-body">
+        <div class="field">
+          <label for="pt-name" class="field-label">Name</label>
+          <input type="text" id="pt-name" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="pt-time" class="field-label">Date and time <span class="muted" id="pt-zone"></span></label>
+          <input type="text" id="pt-time" autocomplete="off" aria-describedby="pt-time-hint pt-time-err" placeholder="e.g. 2024-03-14 08:15:00">
+          <p class="hint" id="pt-time-hint">Leave empty if the point has no date or time.</p>
+          <p class="field-error" id="pt-time-err" hidden></p>
+        </div>
+        <div class="grid-2">
+          <div class="field">
+            <label for="pt-lat" class="field-label">Latitude</label>
+            <input type="text" id="pt-lat" inputmode="decimal" autocomplete="off" aria-describedby="pt-lat-err">
+            <p class="field-error" id="pt-lat-err" hidden></p>
+          </div>
+          <div class="field">
+            <label for="pt-lon" class="field-label">Longitude</label>
+            <input type="text" id="pt-lon" inputmode="decimal" autocomplete="off" aria-describedby="pt-lon-err">
+            <p class="field-error" id="pt-lon-err" hidden></p>
+          </div>
+        </div>
+        <div id="pt-props"></div>
+      </div>
+      <footer class="dialog-foot">
+        <button type="button" class="btn btn-ghost-danger" id="pt-delete">Delete point</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-close>Cancel</button>
+        <button type="submit" class="btn btn-primary" id="pt-save" value="save">Save changes</button>
+      </footer>
+    </form>
   </dialog>
 
   <!-- ================================================================ Help -->
@@ -389,7 +456,8 @@
           <li><strong>Check the columns:</strong> the app guesses which columns are latitude, longitude, date and time. Change any guess that looks wrong. The preview shows what will be mapped.</li>
           <li><strong>Pick a marker:</strong> give each dataset its own shape (circle, square, triangle, waypoint pin, flag and others) and colour so you can tell them apart.</li>
           <li><strong>One file, many vehicles:</strong> if a file has a column such as Vehicle or Device, choose it under <em>Split into separate datasets by</em>. Each one becomes its own dataset with its own colour.</li>
-          <li><strong>Colour by value:</strong> in a dataset's <em>Style</em>, choose <em>Colour markers and line by</em> speed, time or any number column. Low values are dark purple and high values are yellow. The scale shows on the dataset's card and in exports.</li>
+          <li><strong>Colour by value:</strong> in a dataset's <em>Style</em>, choose <em>Colour markers and line by</em> speed, time or any number column. Low values are dark purple and high values are yellow. The scale shows on the dataset's card and in exports. Datasets coloured the same way share one scale, so a colour means the same value on each.</li>
+          <li><strong>Fix bad points:</strong> open a dataset's <em>Table</em> to search and sort its points. Tick points and choose <em>Delete selected</em>, or press <em>Edit</em> to correct a point's name, time, position or other values. With a filter on, you can delete every point the filter hides. Each change can be undone.</li>
           <li><strong>Filter:</strong> open <em>Filter</em> in the Datasets panel to show only a date and time range, certain hours of each day, or points matching a rule such as "Vehicle is VAN-02" or "Speed is at least 30". Everything follows the filter, including replay and exports. Press <em>Clear filter</em> to see everything again.</li>
           <li><strong>Stops and problems:</strong> a pause sign marks each stop (with how long it lasted), a short "//" break across the line marks a gap in the recording, and a small red triangle marks a possible GPS jump. Select one for details. They're also listed on each dataset's card (<em>List them</em>). Change what counts under <em>Stops and problems</em> in the Datasets panel. To remove a bad GPS reading, open its triangle and choose <em>Remove this point</em>.</li>
           <li><strong>Follow the path:</strong> when points have dates and times, they're joined in time order with a line. Arrows show the direction of travel. You can turn this off in the dataset's settings.</li>
@@ -535,7 +603,7 @@
               <option value="15">Last 15 minutes</option>
             </select>
           </div>
-          <p class="hint">Recording takes as long as the video itself. Keep this tab open while it records.</p>
+          <p class="hint" id="video-speed-hint">Keep this tab open until the video is finished.</p>
         </div>
 
         <div class="field">

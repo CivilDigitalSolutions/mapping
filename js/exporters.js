@@ -38,7 +38,18 @@ function freezeMap(map) {
 
 // =================================================================== video
 
+/**
+ * How this browser can make videos:
+ * - fast: encoded straight to MP4 with WebCodecs, much quicker than the video's length
+ * - otherwise recorded in real time with MediaRecorder
+ * Returns { mime, ext, fast } or null if neither works.
+ */
 export function videoSupport() {
+  if (fastVideoPossible()) return { mime: 'video/mp4', ext: 'mp4', fast: true };
+  return recorderSupport();
+}
+
+function recorderSupport() {
   if (typeof MediaRecorder === 'undefined' || !HTMLCanvasElement.prototype.captureStream) return null;
   const types = [
     ['video/mp4;codecs=avc1.640028', 'mp4'],
@@ -49,7 +60,62 @@ export function videoSupport() {
     ['video/webm', 'webm'],
   ];
   const hit = types.find(([t]) => MediaRecorder.isTypeSupported(t));
-  return hit ? { mime: hit[0], ext: hit[1] } : null;
+  return hit ? { mime: hit[0], ext: hit[1], fast: false } : null;
+}
+
+// Tests can turn the fast path off to check the real-time fallback
+const fastVideoPossible = () => typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined' && !globalThis.__noFastVideo;
+
+/** An H.264 encoder setup this browser supports at this size, or null. */
+async function h264Config(W, H, fps) {
+  if (!fastVideoPossible()) return null;
+  // High, Main, then Baseline profile, all level 4.0/4.2 (enough for 1080p at 30 fps)
+  for (const codec of ['avc1.640028', 'avc1.4d0028', 'avc1.42002a']) {
+    const config = { codec, width: W, height: H, bitrate: W > 1500 ? 12e6 : 8e6, framerate: fps, avc: { format: 'avc' } };
+    try {
+      if ((await VideoEncoder.isConfigSupported(config)).supported) return config;
+    } catch { /* try the next */ }
+  }
+  return null;
+}
+
+/**
+ * Encode frames to an MP4 as fast as they can be drawn.
+ * draw(f) draws frame f onto the canvas. Returns a Blob, or null if cancelled.
+ */
+async function encodeMp4({ canvas, config, fps, total, draw, onFrame, signal }) {
+  const { Muxer, ArrayBufferTarget } = await import('../vendor/mp4-muxer/mp4-muxer.mjs');
+  const target = new ArrayBufferTarget();
+  const muxer = new Muxer({ target, video: { codec: 'avc', width: config.width, height: config.height, frameRate: fps }, fastStart: 'in-memory' });
+  let failure = null;
+  const encoder = new VideoEncoder({
+    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+    error: (e) => { failure = e; },
+  });
+  encoder.configure(config);
+  const frameUs = 1e6 / fps;
+  let lastYield = performance.now();
+  try {
+    for (let f = 0; f < total; f++) {
+      if (signal?.aborted) return null;
+      if (failure) throw failure;
+      await draw(f);
+      const vf = new VideoFrame(canvas, { timestamp: Math.round(f * frameUs), duration: Math.round(frameUs) });
+      encoder.encode(vf, { keyFrame: f % (fps * 2) === 0 }); // a key frame every 2 s, so players can seek
+      vf.close();
+      // Don't race ahead of the encoder (keeps memory down)
+      while (encoder.encodeQueueSize > 6) await new Promise((r) => setTimeout(r, 4));
+      onFrame(f);
+      // Let the page repaint the progress bar now and then
+      if (performance.now() - lastYield > 100) { await sleep(0); lastYield = performance.now(); }
+    }
+    await encoder.flush();
+    if (failure) throw failure;
+    muxer.finalize();
+    return new Blob([target.buffer], { type: 'video/mp4' });
+  } finally {
+    if (encoder.state !== 'closed') encoder.close();
+  }
 }
 
 /**
@@ -111,8 +177,7 @@ function planCameras({ map, replay, frames, W, H, opts, legendBounds }) {
  * Returns { blob, ext, tilesOk } or null if cancelled.
  */
 export async function recordVideo({ map, replay, datasets = [], opts, onProgress, signal }) {
-  const support = videoSupport();
-  if (!support) throw new Error('This browser cannot record video. Please use a recent version of Chrome, Edge, Firefox or Safari.');
+  if (!videoSupport()) throw new Error('This browser cannot record video. Please use a recent version of Chrome, Edge, Firefox or Safari.');
   if (!replay.active && !replay.open()) throw new Error('None of the visible datasets have dates and times to replay.');
   replay.pause();
   if (opts.trail) replay.setTrail(opts.trail);
@@ -154,18 +219,10 @@ export async function recordVideo({ map, replay, datasets = [], opts, onProgress
     const tiles = await preloadTiles([...urls], (d, n) => onProgress?.(0, `Downloading map… ${d} of ${n} tiles`), signal);
     if (signal?.aborted) return null;
 
-    // 2. Record in real time.
+    // 2. Draw each frame on a canvas of its own, then encode it
     const canvas = document.createElement('canvas');
     canvas.width = W; canvas.height = H;
     const ctx = canvas.getContext('2d');
-    const stream = canvas.captureStream(0);
-    const track = stream.getVideoTracks()[0];
-    const manual = typeof track.requestFrame === 'function';
-    const liveStream = manual ? stream : canvas.captureStream(fps);
-    const rec = new MediaRecorder(liveStream, { mimeType: support.mime, videoBitsPerSecond: W > 1500 ? 12e6 : 8e6 });
-    const chunks = [];
-    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
-    const stopped = new Promise((r) => { rec.onstop = r; });
     const color = shown[0]?.style.color || '#0b5cab';
     const brand = opts.branding || {};
     const logo = await loadImage(brand.logo);
@@ -192,6 +249,34 @@ export async function recordVideo({ map, replay, datasets = [], opts, onProgress
     await frame(0);
     await frame(total - 1);
 
+    // 2a. Fast: encode each frame as soon as it's drawn
+    const config = await h264Config(W, H, fps);
+    if (config) {
+      const t0 = performance.now();
+      const blob = await encodeMp4({
+        canvas, config, fps, total, draw: frame, signal,
+        onFrame: (f) => {
+          const done = (f + 1) / total;
+          const secs = ((performance.now() - t0) / done) * (1 - done) / 1000;
+          onProgress?.(done, `Making the video… ${Math.round(done * 100)}%${f > fps && secs >= 1 ? `, about ${formatDuration(secs * 1000 + 999)} left` : ''}`);
+        },
+      });
+      if (!blob) return null;
+      onProgress?.(1, 'Done');
+      return { blob, ext: 'mp4', tilesOk: tiles.failed === 0, fast: true };
+    }
+
+    // 2b. Otherwise record in real time
+    const support = recorderSupport();
+    if (!support) throw new Error('This browser cannot record video. Please use a recent version of Chrome, Edge, Firefox or Safari.');
+    const stream = canvas.captureStream(0);
+    const track = stream.getVideoTracks()[0];
+    const manual = typeof track.requestFrame === 'function';
+    const liveStream = manual ? stream : canvas.captureStream(fps);
+    const rec = new MediaRecorder(liveStream, { mimeType: support.mime, videoBitsPerSecond: W > 1500 ? 12e6 : 8e6 });
+    const chunks = [];
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    const stopped = new Promise((r) => { rec.onstop = r; });
     rec.start(1000);
     const t0 = performance.now();
     for (let f = 0; f < total; f++) {
@@ -208,7 +293,7 @@ export async function recordVideo({ map, replay, datasets = [], opts, onProgress
     liveStream.getTracks().forEach((t) => t.stop());
     if (signal?.aborted) return null;
     onProgress?.(1, 'Done');
-    return { blob: new Blob(chunks, { type: support.mime.split(';')[0] }), ext: support.ext, tilesOk: tiles.failed === 0 };
+    return { blob: new Blob(chunks, { type: support.mime.split(';')[0] }), ext: support.ext, tilesOk: tiles.failed === 0, fast: false };
   } finally {
     unfreeze();
   }
