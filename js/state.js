@@ -21,12 +21,17 @@ export const prefs = {
   basemap: 'osm', displayTz: '', lastImportTz: '', lastBackup: 0, lastChange: 0,
   filter: { ...EMPTY_FILTER },
   analysis: { ...DEFAULT_ANALYSIS, speedUnit: DEFAULT_SPEED_UNIT, jumpSpeed: DEFAULT_SPEED_UNIT === 'mph' ? 150 : 240 },
+  branding: { logo: '', logoW: 0, logoH: 0, name: '', extras: true },
 };
+
+/** Logo (a PNG data: URL and its size in pixels), organisation name, and map scale bar / north arrow on exports. */
+export const DEFAULT_BRANDING = { logo: '', logoW: 0, logoH: 0, name: '', extras: true };
 
 /** Fill in any settings added since the preferences were saved. */
 export function completePrefs() {
   prefs.filter = { ...EMPTY_FILTER, ...(prefs.filter || {}) };
   prefs.analysis = { ...DEFAULT_ANALYSIS, speedUnit: DEFAULT_SPEED_UNIT, ...(prefs.analysis || {}) };
+  prefs.branding = { ...DEFAULT_BRANDING, ...(prefs.branding || {}) };
 }
 
 let saveTimer = 0;

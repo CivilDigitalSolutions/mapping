@@ -6,8 +6,9 @@
 // moment and a pulsing head marker interpolated between points. Datasets with
 // no dates stay on the map as normal.
 
-import { markerSvg, anchorFor } from './icons.js';
-import { formatDateTime } from './dates.js';
+import { markerSvg, anchorFor, eventBadge } from './icons.js';
+import { formatDateTime, formatDuration } from './dates.js';
+import { getScale, binColour } from './colour.js';
 
 const SLIDER_STEPS = 1000;
 
@@ -117,7 +118,22 @@ export function createReplay({ map, getDatasets, layers, announce }) {
       const points = layers.get(tr.ds.id)?.points || null;
       if (points) map.addLayer(points);
       const lls = tr.pts.map((q) => L.latLng(q.lat, q.lon)); // made once, reused every frame
-      return { ...tr, group, line, casing, head, points, lls };
+      // Coloured by value: one line per run of legs that share a colour (a leg takes
+      // the colour of the point it arrives at, as on the map)
+      const scale = getScale(tr.ds);
+      const runs = [];
+      if (scale && tr.pts.length > 1) {
+        for (let k = 0; k < tr.pts.length - 1; k++) {
+          const colour = binColour(scale.bins[tr.pts[k + 1].i]);
+          const last = runs[runs.length - 1];
+          if (last && last.colour === colour) last.b = k + 1;
+          else runs.push({ a: k, b: k + 1, colour, key: '' });
+        }
+        for (const r of runs) r.line = L.polyline([], { renderer: lineRenderer, color: r.colour, weight: 4.5, opacity: 1, dashArray: dash, interactive: false, lineCap: 'round', lineJoin: 'round' }).addTo(group);
+      }
+      // Stops found for this dataset, for the "Stopped 6m" label
+      const stops = layers.get(tr.ds.id)?.analysis?.stops || [];
+      return { ...tr, group, line, casing, head, points, lls, runs, stops, headSize: size, stopMarker: null, stopText: '' };
     });
 
     const times = tracks.flatMap((t) => t.pts.map((p) => p.t));
@@ -166,8 +182,10 @@ export function createReplay({ map, getDatasets, layers, announce }) {
         head = [pts[k].lat, pts[k].lon];
       }
 
-      tr.line.setLatLngs(path);
       tr.casing.setLatLngs(path);
+      if (tr.runs.length) drawRuns(tr, lowerBound(pts, from), k, head);
+      else tr.line.setLatLngs(path);
+      drawStopLabel(tr, t, head);
       if (head) {
         tr.head.setLatLng(head);
         if (!tr.group.hasLayer(tr.head)) tr.group.addLayer(tr.head);
@@ -206,6 +224,44 @@ export function createReplay({ map, getDatasets, layers, announce }) {
     let lo = 0, hi = pts.length;
     while (lo < hi) { const mid = (lo + hi) >> 1; if (pts[mid].t < t) lo = mid + 1; else hi = mid; }
     return lo;
+  }
+
+  /**
+   * Coloured route: show the part of each run between point j0 and point k,
+   * plus the leg in progress up to the moving marker. Runs whose visible part
+   * hasn't changed since the last frame are left alone.
+   */
+  function drawRuns(tr, j0, k, head) {
+    for (const r of tr.runs) {
+      const lo = Math.max(r.a, j0), hi = Math.min(r.b, k);
+      const withHead = !!head && k >= r.a && k < r.b && k >= j0;
+      const key = hi > lo || withHead ? `${lo}:${hi}:${withHead}` : '';
+      if (key === r.key && !withHead) continue;
+      r.key = key;
+      if (!key) { r.line.setLatLngs([]); continue; }
+      const ll = tr.lls.slice(lo, hi + 1);
+      if (withHead) ll.push(head);
+      r.line.setLatLngs(ll);
+    }
+  }
+
+  /** "Stopped 6m" beside the moving marker while the vehicle is in one of its stops. */
+  function drawStopLabel(tr, t, head) {
+    const stop = head && tr.stops.find((s) => t >= s.from && t <= s.to);
+    if (!stop) {
+      if (tr.stopMarker) { tr.group.removeLayer(tr.stopMarker); tr.stopMarker = null; tr.stopText = ''; }
+      return;
+    }
+    const text = `Stopped ${formatDuration(Math.max(0, t - stop.from))}`;
+    if (!tr.stopMarker) {
+      tr.stopMarker = L.marker(head, { pane: 'dmEvents', interactive: false, keyboard: false, zIndexOffset: 2000 }).addTo(tr.group);
+    }
+    tr.stopMarker.setLatLng(head);
+    if (text !== tr.stopText) {
+      tr.stopText = text;
+      const { svg, w, h } = eventBadge('stop', text);
+      tr.stopMarker.setIcon(L.divIcon({ className: 'dm-event dm-event-stop dm-replay-stop', html: svg, iconSize: [w, h], iconAnchor: [w / 2, h + tr.headSize * 0.75] }));
+    }
   }
 
   function upperBound(pts, t) {

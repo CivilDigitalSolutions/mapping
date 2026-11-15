@@ -9,6 +9,7 @@
 import {
   makeCamera, fitCamera, fitZoom, boundsCenter, currentViewCamera, tileSource, tilesFor, preloadTiles,
   drawTiles, drawOverlays, drawLegend, drawTitleClock, drawProgress, drawAttribution, markerPng,
+  drawScaleBar, drawNorthArrow, drawBranding, loadImage,
 } from './capture.js';
 import { formatDateTime, formatDuration, formatDistance, displayTimeZone } from './dates.js';
 import { distanceMetres } from './coords.js';
@@ -165,6 +166,8 @@ export async function recordVideo({ map, replay, datasets = [], opts, onProgress
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     const stopped = new Promise((r) => { rec.onstop = r; });
     const color = shown[0]?.style.color || '#0b5cab';
+    const brand = opts.branding || {};
+    const logo = await loadImage(brand.logo);
 
     const frame = async (f) => {
       const t = frameTimes[f];
@@ -173,6 +176,12 @@ export async function recordVideo({ map, replay, datasets = [], opts, onProgress
       drawTiles(ctx, cam, src);
       await drawOverlays(ctx, map, cam);
       drawTitleClock(ctx, { title: opts.title, time: formatDateTime(t), u });
+      // Top right: logo / organisation name, with the north arrow underneath
+      const brandH = drawBranding(ctx, logo, brand.name, u);
+      if (brand.extras !== false) {
+        drawNorthArrow(ctx, W - 40 * u, 16 * u + (brandH ? brandH + 12 * u : 0) + 22 * u, u);
+        drawScaleBar(ctx, cam, u, 26 * u);
+      }
       await drawLegend(ctx, legend, u, { bottom: 34 });
       drawAttribution(ctx, map, u, 6 * u);
       drawProgress(ctx, (t - min) / (max - min), color, u);
@@ -290,6 +299,10 @@ export async function buildPdf({ map, replay, datasets, sequenceOf, opts, onProg
     drawTiles(ctx, cam, src);
     await drawOverlays(ctx, map, cam);
     await drawLegend(ctx, datasets, scale * 1.1, { bottom: 26 });
+    if (opts.branding?.extras !== false) {
+      drawNorthArrow(ctx, c.width - 34 * scale, 34 * scale, scale);
+      drawScaleBar(ctx, cam, scale, 22 * scale);
+    }
     drawAttribution(ctx, map, scale);
     shot = { url: c.toDataURL('image/jpeg', 0.9), tilesOk: tiles.failed === 0 };
   } finally {
@@ -302,6 +315,13 @@ export async function buildPdf({ map, replay, datasets, sequenceOf, opts, onProg
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(18);
   doc.text(pdfText(opts.title || 'Map report'), M, M + 5);
+  // The organisation's logo, top right of the first page
+  const branding = opts.branding || {};
+  if (branding.logo && branding.logoW && branding.logoH) {
+    const s = Math.min(15 / branding.logoH, 60 / branding.logoW); // at most 15 mm tall, 60 mm wide
+    const lw = branding.logoW * s, lh = branding.logoH * s;
+    try { doc.addImage(branding.logo, 'PNG', pageW - M - lw, M - 4 + (15 - lh) / 2, lw, lh, undefined, 'FAST'); } catch { /* an unreadable logo is left out */ }
+  }
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   doc.setTextColor(...grey);
@@ -469,7 +489,7 @@ export async function buildPdf({ map, replay, datasets, sequenceOf, opts, onProg
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(...grey);
-    doc.text(pdfText(opts.title || 'Map report'), M, pageH - 6);
+    doc.text(pdfText([branding.name, opts.title || 'Map report'].filter(Boolean).join('  ·  ')), M, pageH - 6);
     doc.text(`Page ${i} of ${pages}`, pageW - M, pageH - 6, { align: 'right' });
   }
 
