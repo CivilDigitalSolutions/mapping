@@ -68,17 +68,33 @@ The background layers are set in `js/config.js`. They're free, but each provider
 ## Tests
 
 ```bash
-npm test
+npm install          # once: installs Playwright and axe-core for the browser tests
+npx playwright install chromium   # once: the browser the tests drive
+npm test             # unit tests: coordinate and date parsing, how the files fit together
+npm run test:e2e     # browser tests: the whole app in headless Chromium (about 30 s)
+npm run test:all     # both
 ```
 
-These run unit tests for the coordinate and date parsers (Node 18+).
+The browser tests (`tests/e2e/`) cover importing every file type, splitting files, time zones, the map, popups and keyboard access, styles and colour by value, Undo, replay, PDF and video exports, project files and storage warnings, accessibility checks (axe-core) in light and dark mode, and speed with 25,000 points. They start their own web server and use stand-in map tiles, so they never touch the internet.
+
+GitHub runs all of these on every push and pull request. The site is only deployed when they all pass.
 
 ## Project layout
 
 ```
 index.html            App shell and dialogs
 css/app.css           Styles (light/dark, mobile)
-js/app.js             Map, panel, import flow, popups, export
+js/app.js             Start-up: connects the parts and loads saved data
+js/state.js           Shared data (datasets, layers, preferences) and saving
+js/util.js            Small shared helpers (lookup, escaping, toasts, downloads, dialogs)
+js/mapview.js         The map: drawing datasets, popups, hover, keyboard targets
+js/panel.js           Datasets panel, Undo, "Keep your work safe", "Show times in"
+js/import-flow.js     Add data dialog: columns, time zones, splitting, samples
+js/style-controls.js  Marker/line style controls and the time zone picker
+js/settings.js        A dataset's Style dialog
+js/table.js           Table view and GeoJSON / CSV export
+js/project-ui.js      Saving and opening project files
+js/export-ui.js       Export dialog (PDF / video)
 js/importers.js       CSV/paste parsing, column detection, GeoJSON/GPX/KML
 js/coords.js          Coordinate parsing (decimal, DMS, combined, WKT)
 js/dates.js           Date/time parsing and formatting
@@ -95,4 +111,5 @@ js/config.js          Map tile providers
 sw.js                 Service worker (offline + tile cache)
 manifest.webmanifest  PWA manifest
 vendor/               Leaflet 1.9.4, PapaParse 5.4.1, jsPDF 2.5.1 + AutoTable 3.8.2 (bundled for offline use)
+tests/                Unit tests (*.test.mjs) and browser tests (e2e/)
 ```

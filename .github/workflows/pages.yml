@@ -5,6 +5,8 @@ on:
     branches:
       - main
       - claude/csv-data-mapping-pwa-72sg1k
+  # Pull requests run the tests but are never deployed
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -13,21 +15,31 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # The site is only deployed if every test passes
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm test
+          cache: npm
+      - run: npm ci
+      - name: Install the test browser
+        run: npx playwright install --with-deps chromium
+      - name: Unit tests (parsers, file structure)
+        run: npm test
+      - name: Browser tests (importing, map, replay, exports, projects, time zones, accessibility, speed)
+        run: npm run test:e2e
 
   deploy:
     needs: test
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
