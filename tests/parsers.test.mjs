@@ -85,3 +85,46 @@ test('date order guessing', () => {
   assert.equal(guessDateOrder(['01/02/2024', '25/02/2024']), 'dmy');
   assert.equal(guessDateOrder(['01/02/2024', '02/25/2024']), 'mdy');
 });
+
+import { wallToUtc, wallClock, hasExplicitZone, shiftTimes } from '../js/dates.js';
+
+test('times read in a chosen time zone', () => {
+  // New York: EST (UTC-5) in winter, EDT (UTC-4) in summer
+  assert.equal(parseDateTime('2024-03-05 09:15', 'dmy', 'America/New_York'), Date.UTC(2024, 2, 5, 14, 15));
+  assert.equal(parseDateTime('2024-07-01 09:00', 'dmy', 'America/New_York'), Date.UTC(2024, 6, 1, 13, 0));
+  // London: GMT in winter, BST in summer
+  assert.equal(parseDateTime('14/03/2024 09:10', 'dmy', 'Europe/London'), Date.UTC(2024, 2, 14, 9, 10));
+  assert.equal(parseDateTime('01/07/2024 09:10', 'dmy', 'Europe/London'), Date.UTC(2024, 6, 1, 8, 10));
+  assert.equal(parseDateTime('2024-03-05 09:15', 'dmy', 'UTC'), Date.UTC(2024, 2, 5, 9, 15));
+  // A value that states its own zone ignores the chosen one
+  assert.equal(parseDateTime('2024-03-05T09:15:00Z', 'dmy', 'America/New_York'), Date.UTC(2024, 2, 5, 9, 15));
+  assert.equal(parseDateTime('1709630100', 'dmy', 'Asia/Tokyo'), 1709630100000);
+  // Separate date and time columns
+  assert.equal(parseDateAndTime('14/03/2024', '09:10', 'dmy', 'Asia/Tokyo'), Date.UTC(2024, 2, 14, 0, 10));
+  // Excel serial numbers are wall-clock times too (45000.5 = 15 Mar 2023 12:00)
+  assert.equal(parseDateTime('45000.5', 'dmy', 'UTC'), Date.UTC(2023, 2, 15, 12, 0));
+  assert.equal(parseDateTime('45000.5', 'dmy', 'Europe/Paris'), Date.UTC(2023, 2, 15, 11, 0));
+});
+
+test('daylight saving edges', () => {
+  // London clocks went forward at 01:00 GMT on 31 Mar 2024; 01:30 local doesn't exist, 02:30 BST = 01:30 UTC
+  assert.equal(wallToUtc(2024, 2, 31, 2, 30, 0, 0, 'Europe/London'), Date.UTC(2024, 2, 31, 1, 30));
+  assert.equal(wallToUtc(2024, 2, 31, 0, 30, 0, 0, 'Europe/London'), Date.UTC(2024, 2, 31, 0, 30));
+  const w = wallClock(Date.UTC(2024, 6, 1, 8, 10), 'Europe/London');
+  assert.deepEqual([w.y, w.mo, w.d, w.h, w.mi], [2024, 6, 1, 9, 10]);
+});
+
+test('explicit zone detection and shifting', () => {
+  assert.ok(hasExplicitZone('2024-03-05T09:15:00Z'));
+  assert.ok(hasExplicitZone('2024-03-05 09:15+01:00'));
+  assert.ok(hasExplicitZone('14:30 UTC'));
+  assert.ok(hasExplicitZone('1709630100'));
+  assert.ok(!hasExplicitZone('2024-03-05 09:15'));
+  assert.ok(!hasExplicitZone('14-03-2024'));
+  assert.ok(!hasExplicitZone('05/03/2024 09:15'));
+  const pts = [{ t: Date.UTC(2024, 2, 14, 9, 10) }, { t: Date.UTC(2024, 2, 14, 9, 10), tzx: true }, { t: null }];
+  shiftTimes(pts, 'UTC', 'America/New_York'); // 09:10 wall time, now read as New York time
+  assert.equal(pts[0].t, Date.UTC(2024, 2, 14, 13, 10));
+  assert.equal(pts[1].t, Date.UTC(2024, 2, 14, 9, 10)); // stated its own zone: unchanged
+  assert.equal(pts[2].t, null);
+});

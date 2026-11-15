@@ -54,6 +54,10 @@
         <h2 id="panel-title">Datasets</h2>
         <span class="muted" id="panel-summary"></span>
       </div>
+      <div class="tz-setting">
+        <label for="display-tz">Show times in</label>
+        <select id="display-tz"></select>
+      </div>
       <div id="empty-state" class="empty-state">
         <p><strong>No data yet.</strong></p>
         <p>Upload a CSV file or paste rows of latitude and longitude, with dates and times if you have them.</p>
@@ -61,6 +65,16 @@
         <button type="button" class="btn btn-link" id="btn-sample">Try sample data</button>
       </div>
       <ul id="dataset-list" class="dataset-list" aria-label="Loaded datasets"></ul>
+
+      <section class="storage-box" id="storage-box" aria-labelledby="storage-title">
+        <h3 id="storage-title" class="storage-title">Keep your work safe</h3>
+        <p id="storage-status" class="storage-status"></p>
+        <div class="storage-actions">
+          <button type="button" class="btn btn-sm" id="btn-save-project">Save project file</button>
+          <button type="button" class="btn btn-sm" id="btn-open-project">Open project file</button>
+        </div>
+        <input type="file" id="project-input" accept=".json,application/json" hidden>
+      </section>
     </aside>
 
     <div id="map" class="map" role="region" aria-label="Map. Use arrow keys to pan and plus or minus to zoom. Press Tab to move between markers."></div>
@@ -119,7 +133,7 @@
   </main>
 
   <div id="live" class="sr-only" role="status" aria-live="polite"></div>
-  <div id="toast" class="toast" role="alert" hidden></div>
+  <div id="toast" class="toast" role="alert" hidden><span id="toast-msg"></span><button type="button" class="toast-action" id="toast-action" hidden></button></div>
 
   <!-- ================================================================ Import dialog -->
   <dialog id="dlg-import" class="dialog dialog-wide" aria-labelledby="import-title">
@@ -208,6 +222,12 @@
           </div>
         </fieldset>
 
+        <div class="field" id="imp-tz-field">
+          <label for="imp-tz" class="field-label">Time zone of these dates and times</label>
+          <select id="imp-tz"></select>
+          <p class="hint" id="imp-tz-hint"></p>
+        </div>
+
         <div id="imp-status" class="status-box" role="status" aria-live="polite"></div>
         <details id="imp-skipped" class="skipped" hidden>
           <summary>Show rows that will be skipped</summary>
@@ -246,6 +266,11 @@
         <div class="field">
           <label for="set-name" class="field-label">Dataset name</label>
           <input type="text" id="set-name" autocomplete="off">
+        </div>
+        <div class="field" id="set-tz-field">
+          <label for="set-tz" class="field-label">These times were recorded in</label>
+          <select id="set-tz"></select>
+          <p class="hint">Change this if the times look hours out. Times that already said which time zone they were in won't change.</p>
         </div>
         <div id="set-style"></div>
       </div>
@@ -301,6 +326,10 @@
           <li><code>2024-03-05T09:15:00Z</code>, <code>05/03/2024 09:15</code>, <code>3/5/2024 9:15 AM</code>, <code>5 Mar 2024 09:15</code></li>
           <li>Separate date and time columns, Unix timestamps and Excel date numbers</li>
         </ul>
+        <h3>Time zones</h3>
+        <p>Times that say which time zone they're in (such as <code>2024-03-05T09:15Z</code> or <code>+01:00</code>) are used exactly as written. For times that don't, choose where they were recorded when you add the file. If they look hours out later, change it in the dataset's <em>Style</em> settings. Use <em>Show times in</em> at the top of the Datasets panel to see every time in one zone, such as UTC.</p>
+        <h3>Keep your work safe</h3>
+        <p>Your data is kept in this browser on this device. Use <em>Save project file</em> in the Datasets panel to back it up, or to carry on from another computer with <em>Open project file</em>. If you remove a dataset by mistake, press <em>Undo</em> in the message that appears.</p>
         <h3>Privacy</h3>
         <p>Your data never leaves this device. It is stored in this browser so it's still here next time. The only outside requests are for the map background tiles, and an anonymous visit counter (GoatCounter). The counter uses no cookies and records only that the page was opened and which features were used, such as "exported a PDF". It never sees your coordinates or files.</p>
         <h3>Keyboard</h3>
@@ -431,13 +460,10 @@
   <dialog id="dlg-confirm" class="dialog dialog-small" aria-labelledby="confirm-title" aria-describedby="confirm-msg">
     <form method="dialog" class="dialog-inner">
       <div class="dialog-body">
-        <h2 id="confirm-title">Are you sure?</h2>
+        <h2 id="confirm-title"></h2>
         <p id="confirm-msg"></p>
       </div>
-      <footer class="dialog-foot">
-        <button type="submit" class="btn" value="cancel" autofocus>Cancel</button>
-        <button type="submit" class="btn btn-danger" value="ok" id="confirm-ok">Remove</button>
-      </footer>
+      <footer class="dialog-foot" id="confirm-buttons"></footer>
     </form>
   </dialog>
 

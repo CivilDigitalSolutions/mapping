@@ -2,12 +2,102 @@
 // Supports ISO 8601, D/M/Y and M/D/Y (with auto-detection), YYYY/MM/DD,
 // month names, Unix timestamps (s and ms), Excel serial numbers and
 // separate date + time columns.
+//
+// Time zones: a value that names its own zone ("Z", "+01:00", "UTC", or a Unix
+// timestamp) is used exactly. Any other value is a wall-clock time and is read
+// in the `zone` passed in (an IANA name such as "Europe/London"); with no zone
+// it is read in this device's zone.
 
 const MONTHS = {
   jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, sept: 8, oct: 9, nov: 10, dec: 11,
 };
 
-/** Parse a time-of-day string. Returns { h, m, s, ms } or null. */
+// ------------------------------------------------------------------ time zones
+
+export function deviceTimeZone() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; }
+}
+
+export function isValidTimeZone(zone) {
+  if (!zone) return false;
+  try { new Intl.DateTimeFormat('en-US', { timeZone: zone }); return true; } catch { return false; }
+}
+
+const FALLBACK_ZONES = [
+  'Europe/London', 'Europe/Dublin', 'Europe/Paris', 'Europe/Berlin', 'Europe/Madrid', 'Europe/Rome', 'Europe/Athens',
+  'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Toronto', 'America/Sao_Paulo',
+  'Asia/Dubai', 'Asia/Kolkata', 'Asia/Singapore', 'Asia/Hong_Kong', 'Asia/Tokyo', 'Australia/Perth', 'Australia/Sydney',
+  'Pacific/Auckland', 'Africa/Johannesburg', 'Africa/Lagos',
+];
+
+/** Every IANA time zone the browser knows, plus UTC. */
+export function timeZoneList() {
+  let list;
+  try { list = Intl.supportedValuesOf('timeZone'); } catch { list = FALLBACK_ZONES; }
+  return ['UTC', ...list.filter((z) => z !== 'UTC')];
+}
+
+const zoneFmts = new Map();
+function zoneFmt(zone) {
+  if (!zoneFmts.has(zone)) {
+    zoneFmts.set(zone, new Intl.DateTimeFormat('en-US', {
+      timeZone: zone, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric',
+    }));
+  }
+  return zoneFmts.get(zone);
+}
+
+/** The wall-clock date and time at instant `ts` in `zone` (device zone if empty). */
+export function wallClock(ts, zone) {
+  const ms = ((ts % 1000) + 1000) % 1000;
+  if (!zone) {
+    const d = new Date(ts);
+    return { y: d.getFullYear(), mo: d.getMonth(), d: d.getDate(), h: d.getHours(), mi: d.getMinutes(), s: d.getSeconds(), ms };
+  }
+  const parts = {};
+  for (const p of zoneFmt(zone).formatToParts(new Date(ts))) parts[p.type] = p.value;
+  return { y: Number(parts.year), mo: Number(parts.month) - 1, d: Number(parts.day), h: Number(parts.hour) % 24, mi: Number(parts.minute), s: Number(parts.second), ms };
+}
+
+function offsetMinutes(zone, ts) {
+  const w = wallClock(ts, zone);
+  return (Date.UTC(w.y, w.mo, w.d, w.h, w.mi, w.s, w.ms) - ts) / 60000;
+}
+
+/** Convert a wall-clock time in `zone` to an instant (epoch ms). Handles daylight saving. */
+export function wallToUtc(y, mo, d, h, mi, s, ms, zone) {
+  if (!zone) return new Date(y, mo, d, h, mi, s, ms).getTime();
+  const guess = Date.UTC(y, mo, d, h, mi, s, ms);
+  if (zone === 'UTC') return guess;
+  const off1 = offsetMinutes(zone, guess);
+  let t = guess - off1 * 60000;
+  const off2 = offsetMinutes(zone, t);
+  if (off2 !== off1) t = guess - off2 * 60000;
+  return t;
+}
+
+/** True if a date/time value states its own zone, so it doesn't need one chosen. */
+export function hasExplicitZone(value) {
+  const s = String(value ?? '').trim();
+  if (/^\d{10}(\.\d+)?$|^\d{13}$/.test(s)) return true; // Unix timestamps are absolute
+  return /\d:\d{2}(:\d{2}([.,]\d+)?)?\s*(Z|[+-]\d{2}:?\d{2}|UTC|GMT)$/i.test(s);
+}
+
+/**
+ * Re-read the stored times of `points` as if they had been recorded in `toZone`
+ * instead of `fromZone`. Times that stated their own zone (p.tzx) are left alone.
+ */
+export function shiftTimes(points, fromZone, toZone) {
+  for (const p of points) {
+    if (p.t === null || p.t === undefined || p.tzx) continue;
+    const w = wallClock(p.t, fromZone);
+    p.t = wallToUtc(w.y, w.mo, w.d, w.h, w.mi, w.s, w.ms, toZone);
+  }
+}
+
+// ------------------------------------------------------------------ parsing
+
+/** Parse a time-of-day string. Returns { h, m, s, ms, tz } or null. */
 export function parseTimeOfDay(input) {
   if (input === null || input === undefined) return null;
   const s = String(input).trim();
@@ -40,20 +130,16 @@ function tzOffsetMinutes(tz) {
   return (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3]));
 }
 
-function build(y, mo, d, t) {
+/** Turn date parts + optional time into an instant, reading wall-clock times in `zone`. */
+function build(y, mo, d, t, zone) {
   if (y < 100) y += y < 70 ? 2000 : 1900;
   if (mo < 0 || mo > 11 || d < 1 || d > 31) return null;
+  if (new Date(Date.UTC(y, mo, d)).getUTCDate() !== d) return null; // e.g. 31 Feb
   const tm = t || { h: 0, m: 0, s: 0, ms: 0, tz: '' };
   const off = tzOffsetMinutes(tm.tz);
-  let ms;
-  if (off !== null) {
-    ms = Date.UTC(y, mo, d, tm.h, tm.m, tm.s, tm.ms) - off * 60000;
-  } else {
-    ms = new Date(y, mo, d, tm.h, tm.m, tm.s, tm.ms).getTime();
-  }
-  const check = off !== null ? new Date(Date.UTC(y, mo, d)) : new Date(y, mo, d);
-  const dd = off !== null ? check.getUTCDate() : check.getDate();
-  if (dd !== d) return null; // e.g. 31 Feb
+  const ms = off !== null
+    ? Date.UTC(y, mo, d, tm.h, tm.m, tm.s, tm.ms) - off * 60000
+    : wallToUtc(y, mo, d, tm.h, tm.m, tm.s, tm.ms, zone);
   return Number.isFinite(ms) ? ms : null;
 }
 
@@ -78,98 +164,117 @@ export function guessDateOrder(values) {
 }
 
 /**
- * Parse a date or date-time value to epoch milliseconds.
- * order: 'dmy' | 'mdy' (only matters for ambiguous numeric dates)
+ * Split a date / date-time value into parts.
+ * Returns { abs } for values that are already an instant, { y, mo, d, t } for
+ * calendar values (t = time of day or null), or null if it isn't a date.
  */
-export function parseDateTime(input, order = 'dmy') {
+function parseParts(input, order) {
   if (input === null || input === undefined) return null;
-  if (input instanceof Date) return Number.isFinite(input.getTime()) ? input.getTime() : null;
+  if (input instanceof Date) return Number.isFinite(input.getTime()) ? { abs: input.getTime() } : null;
   let s = String(input).trim();
   if (!s) return null;
 
   // Pure number: Unix seconds / ms, or Excel serial date
   if (/^-?\d+(\.\d+)?$/.test(s)) {
     const n = Number(s);
-    if (/^\d{13}$/.test(s)) return n;               // ms
-    if (/^\d{10}(\.\d+)?$/.test(s)) return n * 1000; // seconds
-    if (n > 20000 && n < 80000) {                    // Excel serial (1954 – 2119)
-      return Math.round((n - 25569) * 86400000) + new Date().getTimezoneOffset() * 60000;
+    if (/^\d{13}$/.test(s)) return { abs: n };              // ms
+    if (/^\d{10}(\.\d+)?$/.test(s)) return { abs: n * 1000 }; // seconds
+    if (n > 20000 && n < 80000) {                           // Excel serial (1954 – 2119): a wall-clock date and time
+      const w = new Date(Math.round((n - 25569) * 86400000));
+      return { y: w.getUTCFullYear(), mo: w.getUTCMonth(), d: w.getUTCDate(), t: { h: w.getUTCHours(), m: w.getUTCMinutes(), s: w.getUTCSeconds(), ms: 0, tz: '' } };
     }
     return null;
   }
 
+  const withTime = (y, mo, d, rest, fixIso) => {
+    if (!rest) return { y, mo, d, t: null };
+    const t = parseTimeOfDay(fixIso ? rest.replace(/^(\d{2})(\d{2})(\d{2})/, '$1:$2:$3') : rest);
+    return t ? { y, mo, d, t } : null;
+  };
+
   // ISO 8601: 2024-03-05, 2024-03-05T14:30:00Z, 2024-03-05 14:30, 20240305T143000
   let m = s.match(/^(\d{4})-?(\d{2})-?(\d{2})(?:[T\s]+(.+))?$/);
-  if (m) {
-    const t = m[4] ? parseTimeOfDay(m[4].replace(/^(\d{2})(\d{2})(\d{2})/, '$1:$2:$3')) : null;
-    if (m[4] && !t) return null;
-    return build(Number(m[1]), Number(m[2]) - 1, Number(m[3]), t);
-  }
+  if (m) return withTime(Number(m[1]), Number(m[2]) - 1, Number(m[3]), m[4], true);
 
   // YYYY/MM/DD
   m = s.match(/^(\d{4})[/.](\d{1,2})[/.](\d{1,2})(?:[T,\s]+(.+))?$/);
-  if (m) {
-    const t = m[4] ? parseTimeOfDay(m[4]) : null;
-    if (m[4] && !t) return null;
-    return build(Number(m[1]), Number(m[2]) - 1, Number(m[3]), t);
-  }
+  if (m) return withTime(Number(m[1]), Number(m[2]) - 1, Number(m[3]), m[4]);
 
   // DD/MM/YYYY or MM/DD/YYYY (also with - or .)
   m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})(?:[T,\s]+(.+))?$/);
   if (m) {
-    const t = m[4] ? parseTimeOfDay(m[4]) : null;
-    if (m[4] && !t) return null;
-    let a = Number(m[1]), b = Number(m[2]);
+    const a = Number(m[1]), b = Number(m[2]);
     let day, mon;
     if (a > 12) { day = a; mon = b; }
     else if (b > 12) { day = b; mon = a; }
     else if (order === 'mdy') { mon = a; day = b; }
     else { day = a; mon = b; }
-    return build(Number(m[3]), mon - 1, day, t);
+    return withTime(Number(m[3]), mon - 1, day, m[4]);
   }
 
   // Month names: "5 Mar 2024 14:30", "March 5, 2024 2:30 PM", "Tue 5 Mar 2024"
   s = s.replace(/^(mon|tue|wed|thu|fri|sat|sun)[a-z]*,?\s+/i, '');
-  m = s.match(/^(\d{1,2})(?:st|nd|rd|th)?[\s-]+([A-Za-z]{3,9})\.?,?[\s-]+(\d{2,4})(?:[T,\s]+(.+))?$/);
   const monthIndex = (name) => MONTHS[name.slice(0, 4).toLowerCase()] ?? MONTHS[name.slice(0, 3).toLowerCase()];
-  if (m && monthIndex(m[2]) !== undefined) {
-    const mon = monthIndex(m[2]);
-    const t = m[4] ? parseTimeOfDay(m[4]) : null;
-    if (m[4] && !t) return null;
-    return build(Number(m[3]), mon, Number(m[1]), t);
-  }
+  m = s.match(/^(\d{1,2})(?:st|nd|rd|th)?[\s-]+([A-Za-z]{3,9})\.?,?[\s-]+(\d{2,4})(?:[T,\s]+(.+))?$/);
+  if (m && monthIndex(m[2]) !== undefined) return withTime(Number(m[3]), monthIndex(m[2]), Number(m[1]), m[4]);
   m = s.match(/^([A-Za-z]{3,9})\.?[\s-]+(\d{1,2})(?:st|nd|rd|th)?,?[\s-]+(\d{2,4})(?:[T,\s]+(.+))?$/);
   if (m) {
     const mon = monthIndex(m[1]);
     if (mon === undefined) return null;
-    const t = m[4] ? parseTimeOfDay(m[4]) : null;
-    if (m[4] && !t) return null;
-    return build(Number(m[3]), mon, Number(m[2]), t);
+    return withTime(Number(m[3]), mon, Number(m[2]), m[4]);
   }
 
   // Last resort: let the browser try (handles RFC 2822 etc.), but only for strings that
   // clearly look like a date — some browsers will "parse" almost anything with a number in it.
   if (!/\d{4}/.test(s) || !/(\d{1,2}:\d{2})|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec/i.test(s)) return null;
   const fallback = Date.parse(s);
-  return Number.isFinite(fallback) ? fallback : null;
+  return Number.isFinite(fallback) ? { abs: fallback } : null;
+}
+
+/**
+ * Parse a date or date-time value to epoch milliseconds.
+ * order: 'dmy' | 'mdy' (only matters for ambiguous numeric dates)
+ * zone:  IANA zone for wall-clock values ('' / undefined = this device)
+ */
+export function parseDateTime(input, order = 'dmy', zone) {
+  const p = parseParts(input, order);
+  if (!p) return null;
+  if (p.abs !== undefined) return p.abs;
+  return build(p.y, p.mo, p.d, p.t, zone);
 }
 
 /** Combine a date column value with a separate time column value. */
-export function parseDateAndTime(dateVal, timeVal, order = 'dmy') {
-  const base = parseDateTime(dateVal, order);
-  if (base === null) return null;
-  const t = parseTimeOfDay(timeVal);
-  if (!t) return base;
-  const d = new Date(base);
-  const off = tzOffsetMinutes(t.tz);
-  if (off !== null) {
-    return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), t.h, t.m, t.s, t.ms) - off * 60000;
+export function parseDateAndTime(dateVal, timeVal, order = 'dmy', zone) {
+  let p = parseParts(dateVal, order);
+  if (!p) return null;
+  if (p.abs !== undefined) {
+    const w = wallClock(p.abs, zone);
+    p = { y: w.y, mo: w.mo, d: w.d, t: { h: w.h, m: w.mi, s: w.s, ms: w.ms, tz: '' } };
   }
-  d.setHours(t.h, t.m, t.s, t.ms);
-  return d.getTime();
+  const t = parseTimeOfDay(timeVal) || p.t;
+  return build(p.y, p.mo, p.d, t, zone);
 }
 
-const dtf = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' });
+// ------------------------------------------------------------------ formatting
+
+let displayZone = ''; // '' = this device's zone
+
+function makeFormatter() {
+  const opts = { dateStyle: 'medium', timeStyle: 'long' }; // "long" time includes the zone, e.g. "8:00:00 AM GMT"
+  try { return new Intl.DateTimeFormat(undefined, displayZone ? { ...opts, timeZone: displayZone } : opts); } catch { return new Intl.DateTimeFormat(undefined, opts); }
+}
+let dtf = makeFormatter();
+
+/** Choose which zone times are shown in ('' = this device). */
+export function setDisplayTimeZone(zone) {
+  displayZone = isValidTimeZone(zone) ? zone : '';
+  dtf = makeFormatter();
+}
+
+/** The zone times are currently shown in, as an IANA name. */
+export function displayTimeZone() {
+  return displayZone || deviceTimeZone();
+}
 
 export function formatDateTime(ms) {
   return ms === null || ms === undefined ? '—' : dtf.format(new Date(ms));

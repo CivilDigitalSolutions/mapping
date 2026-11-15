@@ -453,3 +453,38 @@ textarea.plain { font-family: inherit; font-size: inherit; }
 
 /* The on-screen map is locked while an export is being made */
 .leaflet-container.is-frozen { cursor: progress; }
+
+/* ------------------------------------------------------------------ canvas markers */
+.dm-point-canvas { position: absolute; left: 0; top: 0; pointer-events: none; }
+.leaflet-container.is-over-point { cursor: pointer; }
+/* Invisible keyboard targets over markers; they show a focus ring only when tabbed to */
+.dm-focus {
+  position: absolute; left: 0; top: 0; padding: 0; margin: 0;
+  border: 0; border-radius: 50%; background: transparent; cursor: pointer;
+}
+.dm-focus:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.dm-hover-tip { font-weight: 600; }
+
+/* "Show times in" setting at the top of the Datasets panel */
+.tz-setting { display: flex; align-items: center; gap: .5rem; margin: -.25rem 0 .85rem; font-size: .88rem; }
+.tz-setting label { color: var(--ink-2); white-space: nowrap; }
+.tz-setting select { min-height: 34px; padding: .2rem .4rem; font-size: .88rem; min-width: 0; flex: 1; }
+
+/* ------------------------------------------------------------------ keep your work safe */
+.storage-box {
+  margin-top: 1rem; padding: .75rem .85rem; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface-2); font-size: .88rem;
+}
+.storage-box.is-warn { border-color: var(--warn); background: var(--warn-bg); }
+.storage-title { font-size: .9rem; margin: 0 0 .3rem; }
+.storage-status { margin: 0 0 .6rem; color: var(--ink-2); }
+.storage-box.is-warn .storage-status { color: var(--warn); }
+.storage-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+
+/* Toast with an action button (e.g. Undo) */
+.toast { display: flex; align-items: center; gap: .9rem; }
+.toast-action {
+  flex: none; background: none; border: 1px solid currentColor; color: inherit; border-radius: 6px;
+  padding: .35rem .7rem; font: inherit; font-weight: 700; cursor: pointer; min-height: 36px;
+}
+.toast-action:hover { background: rgba(255,255,255,.12); }

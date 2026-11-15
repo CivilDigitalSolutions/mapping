@@ -2,20 +2,22 @@
 import { BASEMAPS, DEFAULT_VIEW } from './config.js';
 import { SHAPES, SHAPE_KEYS, PALETTE, markerSvg, anchorFor, arrowSvg } from './icons.js';
 import { detectFormat, parseTable, guessMapping, tableToPoints, geojsonToPoints, gpxToPoints, kmlToPoints } from './importers.js';
-import { formatDateTime, formatDuration, formatDistance } from './dates.js';
+import { formatDateTime, formatDuration, formatDistance, setDisplayTimeZone, displayTimeZone, deviceTimeZone, timeZoneList, shiftTimes, isValidTimeZone } from './dates.js';
 import { distanceMetres, bearing, formatCoord } from './coords.js';
 import * as store from './store.js';
+import { buildProject, readProject, looksLikeProjectText } from './project.js';
 import { SAMPLES } from './samples.js';
 import { createReplay } from './replay.js';
 import { recordVideo, buildPdf, videoSupport } from './exporters.js';
 import { initAnalytics, trackEvent } from './analytics.js';
+import { PointLayer, popupOffset } from './pointlayer.js';
 
 // ===================================================================== state
 
 /** @type {Array<Dataset>} */
 let datasets = [];
-const layers = new Map(); // dataset id -> { group, markers: Map(pointIndex -> marker), seq }
-let prefs = { basemap: 'osm' };
+const layers = new Map(); // dataset id -> { group, points: PointLayer, order, untimed }
+let prefs = { basemap: 'osm', displayTz: '', lastImportTz: '', lastBackup: 0, lastChange: 0 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -37,6 +39,9 @@ map.getContainer().querySelector('.leaflet-control-layers-toggle')?.setAttribute
 // Panes so lines sit under markers and arrows sit between
 map.createPane('tracks').style.zIndex = 410;
 map.createPane('arrows').style.zIndex = 420;
+map.createPane('dmPoints').style.zIndex = 590;      // canvas markers (replay heads at 600 sit on top)
+map.createPane('dmFocus').style.zIndex = 640;       // invisible keyboard targets over the markers
+map.getPane('dmPoints').style.pointerEvents = 'none';
 
 // ===================================================================== utilities
 
@@ -47,19 +52,41 @@ function announce(msg) {
 }
 
 let toastTimer;
-function toast(msg, kind = 'info') {
+/**
+ * Show a short message at the bottom of the screen.
+ * action: { label, onClick } adds a button (e.g. Undo). duration in ms (0 = stay until closed).
+ */
+function toast(msg, kind = 'info', { action = null, duration = 5000 } = {}) {
   const t = $('#toast');
-  t.textContent = msg;
+  $('#toast-msg').textContent = msg;
+  const btn = $('#toast-action');
+  btn.hidden = !action;
+  btn.onclick = null;
+  if (action) {
+    btn.textContent = action.label;
+    btn.onclick = () => { t.hidden = true; action.onClick(); };
+  }
   t.dataset.kind = kind;
   t.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, 5000);
+  if (duration) toastTimer = setTimeout(() => { t.hidden = true; }, duration);
+  return btn;
 }
 
 let saveTimer;
+let saveFailed = false;
 function save() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => store.set('datasets', datasets), 300);
+  prefs.lastChange = Date.now();
+  saveTimer = setTimeout(async () => {
+    const ok = await store.set('datasets', datasets);
+    if (!ok && !saveFailed) {
+      toast("Your latest changes couldn't be saved in this browser (it may be out of space). Save a project file now so you don't lose them.", 'error', { duration: 0, action: { label: 'Save project file', onClick: saveProjectFile } });
+    }
+    saveFailed = !ok;
+    await store.set('prefs', prefs);
+    updateStorageStatus();
+  }, 300);
 }
 function savePrefs() { store.set('prefs', prefs); }
 
@@ -77,6 +104,24 @@ function download(filename, text, type) {
 }
 
 function safeFilename(s) { return String(s).replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_') || 'dataset'; }
+
+/**
+ * Fill a <select> with time zones. `deviceValue` is the value used for the
+ * "this device" option ('' to follow the device, or its IANA name to pin it).
+ */
+let zoneNames = null;
+function fillZoneSelect(sel, selected, deviceValue) {
+  zoneNames = zoneNames || timeZoneList();
+  const dev = deviceTimeZone();
+  const common = ['UTC', 'Europe/London', 'Europe/Dublin', 'Europe/Paris', 'America/New_York', 'America/Chicago', 'America/Los_Angeles', 'Asia/Dubai', 'Asia/Singapore', 'Australia/Sydney'];
+  const opt = (v, label) => `<option value="${esc(v)}">${esc(label)}</option>`;
+  sel.innerHTML =
+    opt(deviceValue, `This device (${dev.replace(/_/g, ' ')})`) +
+    `<optgroup label="Common">${common.filter((z) => z !== dev && zoneNames.includes(z)).map((z) => opt(z, z === 'UTC' ? 'UTC (Coordinated Universal Time)' : z.replace(/_/g, ' '))).join('')}</optgroup>` +
+    `<optgroup label="All time zones">${zoneNames.filter((z) => z !== 'UTC').map((z) => opt(z, z.replace(/_/g, ' '))).join('')}</optgroup>`;
+  sel.value = selected === dev ? deviceValue : selected;
+  if (sel.selectedIndex < 0) sel.value = deviceValue;
+}
 
 function defaultStyle(n, hasTimes) {
   const order = ['circle', 'square', 'pin', 'triangle', 'diamond', 'star', 'hexagon', 'flag', 'cross'];
@@ -115,25 +160,9 @@ function timeRange(ds) {
 function renderDataset(ds) {
   removeLayers(ds.id);
   const group = L.featureGroup();
-  const markers = new Map();
   const { order, untimed } = sequenceOf(ds);
   const seqPos = new Map(order.map((pi, k) => [pi, k]));
   const st = ds.style;
-  const iconCache = new Map();
-
-  const iconFor = (label) => {
-    const key = String(label);
-    if (!iconCache.has(key)) {
-      iconCache.set(key, L.divIcon({
-        className: 'dm-marker',
-        html: markerSvg({ shape: st.shape, color: st.color, size: st.size, label }),
-        iconSize: [st.size, st.size],
-        iconAnchor: anchorFor(st.shape, st.size),
-        popupAnchor: [0, SHAPES[st.shape]?.anchor === 'bottom' ? -st.size * 0.9 : -st.size / 2],
-      }));
-    }
-    return iconCache.get(key);
-  };
 
   // Line first so it draws under the markers
   if (st.showLine && order.length > 1) {
@@ -156,24 +185,13 @@ function renderDataset(ds) {
     }
   }
 
-  ds.points.forEach((p, i) => {
-    const pos = seqPos.get(i);
-    const label = st.numbered && pos !== undefined ? pos + 1 : '';
-    const title = [p.label || (pos !== undefined ? `Point ${pos + 1}` : 'Point'), p.t != null ? formatDateTime(p.t) : null].filter(Boolean).join(', ');
-    const m = L.marker([p.lat, p.lon], {
-      icon: iconFor(label),
-      title: `${ds.name}: ${title}`,
-      alt: `${ds.name}: ${title}`,
-      keyboard: true,
-      riseOnHover: true,
-    });
-    m.bindPopup(() => popupContent(ds, i), { maxWidth: 320, minWidth: 220, autoPanPadding: [30, 30] });
-    m._dm = { dsId: ds.id, index: i };
-    m.addTo(group);
-    markers.set(i, m);
-  });
+  // All markers for the dataset are drawn on one canvas
+  const labels = new Map();
+  if (st.numbered) seqPos.forEach((pos, i) => labels.set(i, pos + 1));
+  const points = new PointLayer(ds, labels).addTo(group);
+  points.on('redraw', scheduleFocusTargets);
 
-  layers.set(ds.id, { group, markers, order, untimed });
+  layers.set(ds.id, { group, points, order, untimed });
   if (ds.visible && !replay.active) group.addTo(map);
 }
 
@@ -236,21 +254,125 @@ function focusPoint(dsId, index, keepZoom = false) {
   if (!l || !ds) return;
   if (replay.active) replay.close();
   if (!ds.visible) { ds.visible = true; l.group.addTo(map); renderList(); save(); }
-  const m = l.markers.get(index);
-  if (!m) return;
-  const target = m.getLatLng();
+  const p = ds.points[index];
+  if (!p) return;
   const z = keepZoom ? map.getZoom() : Math.max(map.getZoom(), 15);
-  map.setView(target, z, { animate: !matchMedia('(prefers-reduced-motion: reduce)').matches });
-  m.openPopup();
+  map.setView([p.lat, p.lon], z, { animate: !matchMedia('(prefers-reduced-motion: reduce)').matches });
+  openPointPopup(ds, index);
   setTimeout(() => $('.leaflet-popup .pop-title')?.focus(), 60);
 }
 
+/** Open the details popup for one point. */
+function openPointPopup(ds, i) {
+  const p = ds.points[i];
+  L.popup({ maxWidth: 320, minWidth: 220, autoPanPadding: [30, 30], offset: popupOffset(ds.style) })
+    .setLatLng([p.lat, p.lon])
+    .setContent(popupContent(ds, i))
+    .openOn(map);
+}
+
+/** Visible point layers, topmost (last drawn) first. */
+function pointLayersOnMap() {
+  const out = [];
+  for (const ds of datasets) {
+    const l = layers.get(ds.id);
+    if (l && map.hasLayer(l.points)) out.push(l.points);
+  }
+  return out.reverse();
+}
+
+function hitTest(containerPoint) {
+  for (const pl of pointLayersOnMap()) {
+    const i = pl.hitTest(containerPoint);
+    if (i >= 0) return { ds: pl.ds, i };
+  }
+  return null;
+}
+
+function pointTitle(ds, i) {
+  const p = ds.points[i];
+  const seq = layers.get(ds.id)?.order.indexOf(i);
+  const name = p.label || (seq >= 0 ? `Point ${seq + 1}` : 'Point');
+  return `${ds.name}: ${[name, p.t != null ? formatDateTime(p.t) : null].filter(Boolean).join(', ')}`;
+}
+
+// Clicking a marker opens its details
+map.on('click', (e) => {
+  const hit = hitTest(e.containerPoint);
+  if (hit) openPointPopup(hit.ds, hit.i);
+});
+
+// Hovering shows a small label and a pointer cursor
+const hoverTip = L.tooltip({ direction: 'top', offset: [0, -14], opacity: 0.95, className: 'dm-hover-tip' });
+let hoverRaf = 0;
+map.on('mousemove', (e) => {
+  cancelAnimationFrame(hoverRaf);
+  hoverRaf = requestAnimationFrame(() => {
+    const hit = hitTest(e.containerPoint);
+    map.getContainer().classList.toggle('is-over-point', !!hit);
+    if (hit) {
+      const p = hit.ds.points[hit.i];
+      hoverTip.setLatLng([p.lat, p.lon]).setContent(esc(pointTitle(hit.ds, hit.i)));
+      if (!map.hasLayer(hoverTip)) hoverTip.openOn(map);
+    } else if (map.hasLayer(hoverTip)) {
+      map.closeTooltip(hoverTip);
+    }
+  });
+});
+map.on('mouseout zoomstart', () => { if (map.hasLayer(hoverTip)) map.closeTooltip(hoverTip); });
+
+// Keyboard and screen-reader access: when few enough markers are in view, put an
+// invisible, focusable button over each one so Tab moves between markers.
+const FOCUS_LIMIT = 150;
+let focusTimer = 0;
+function scheduleFocusTargets() {
+  clearTimeout(focusTimer);
+  focusTimer = setTimeout(updateFocusTargets, 200);
+}
+function updateFocusTargets() {
+  const pane = map.getPane('dmFocus');
+  const activeKey = document.activeElement?.dataset?.pt;
+  pane.replaceChildren();
+  const bounds = map.getBounds();
+  const items = [];
+  for (const pl of pointLayersOnMap().reverse()) {
+    for (const i of pl.pointsIn(bounds)) {
+      items.push({ pl, i });
+      if (items.length > FOCUS_LIMIT) break;
+    }
+    if (items.length > FOCUS_LIMIT) break;
+  }
+  const many = items.length > FOCUS_LIMIT;
+  map.getContainer().setAttribute('aria-label', many
+    ? 'Map. Use arrow keys to pan and plus or minus to zoom. There are too many markers in view to move between them with Tab; zoom in, or use a dataset\'s Table view.'
+    : 'Map. Use arrow keys to pan and plus or minus to zoom. Press Tab to move between markers and Enter to open one.');
+  if (many) return;
+  for (const { pl, i } of items) {
+    const ds = pl.ds, p = ds.points[i], size = ds.style.size;
+    const [ax, ay] = anchorFor(ds.style.shape, size);
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'dm-focus leaflet-zoom-hide';
+    b.dataset.pt = `${ds.id}:${i}`;
+    b.setAttribute('aria-label', pointTitle(ds, i));
+    b.style.width = b.style.height = `${size}px`;
+    b.style.marginLeft = `${-ax}px`;
+    b.style.marginTop = `${-ay}px`;
+    L.DomUtil.setPosition(b, map.latLngToLayerPoint([p.lat, p.lon]));
+    b.addEventListener('click', (ev) => { ev.stopPropagation(); popupOpenerKey = b.dataset.pt; openPointPopup(ds, i); });
+    L.DomEvent.disableClickPropagation(b);
+    pane.appendChild(b);
+  }
+  // Keep keyboard focus on the same marker after the buttons are rebuilt
+  if (activeKey) pane.querySelector(`[data-pt="${CSS.escape(activeKey)}"]`)?.focus();
+}
+map.on('moveend zoomend', scheduleFocusTargets);
+
 // Accessible popups: move focus in when opened from the keyboard, and back out when closed.
-let popupOpener = null;
+let popupOpenerKey = null;
 map.on('popupopen', (e) => {
-  const active = document.activeElement;
-  if (active && active.classList.contains('leaflet-marker-icon')) {
-    popupOpener = active;
+  if (document.activeElement?.classList.contains('dm-focus')) {
+    popupOpenerKey = document.activeElement.dataset.pt;
     setTimeout(() => e.popup.getElement()?.querySelector('.pop-title')?.focus(), 30);
   }
   const close = e.popup.getElement()?.querySelector('.leaflet-popup-close-button');
@@ -258,8 +380,11 @@ map.on('popupopen', (e) => {
 });
 map.on('popupclose', (e) => {
   const el = e.popup.getElement();
-  if (popupOpener && el && el.contains(document.activeElement)) popupOpener.focus();
-  popupOpener = null;
+  if (popupOpenerKey && el && el.contains(document.activeElement)) {
+    const target = map.getPane('dmFocus').querySelector(`[data-pt="${CSS.escape(popupOpenerKey)}"]`);
+    (target || map.getContainer()).focus();
+  }
+  popupOpenerKey = null;
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && document.activeElement?.closest('.leaflet-popup')) map.closePopup();
@@ -352,29 +477,149 @@ function renderList() {
     list.appendChild(li);
   });
   $('#btn-export').disabled = !datasets.length;
+  updateStorageStatus();
   replay.refresh();
 }
 
-async function removeDataset(ds) {
-  const ok = await confirmDialog(`Remove "${ds.name}" and its ${ds.points.length} points from the map? This can't be undone.`);
-  if (!ok) return;
+function removeDataset(ds) {
+  const index = datasets.indexOf(ds);
   removeLayers(ds.id);
   datasets = datasets.filter((d) => d.id !== ds.id);
+  map.closePopup();
   renderList();
   save();
-  announce(`${ds.name} removed`);
-  $('#btn-add').focus();
+  const undoBtn = toast(`Removed "${ds.name}".`, 'info', {
+    duration: 12000,
+    action: {
+      label: 'Undo',
+      onClick: () => {
+        datasets.splice(Math.min(index, datasets.length), 0, ds);
+        renderDataset(ds);
+        renderList();
+        save();
+        announce(`${ds.name} restored`);
+        $('#btn-add').focus();
+      },
+    },
+  });
+  announce(`${ds.name} removed. Press Undo to bring it back.`);
+  undoBtn.focus();
 }
 
-function confirmDialog(message) {
+/**
+ * Ask the user to choose. buttons: [{ value, label, kind }] where kind is
+ * 'primary' | 'danger' | undefined. Resolves to the chosen value ('' if dismissed).
+ */
+function choiceDialog(title, message, buttons) {
   const dlg = $('#dlg-confirm');
+  $('#confirm-title').textContent = title;
   $('#confirm-msg').textContent = message;
+  $('#confirm-buttons').innerHTML = buttons.map((b, i) =>
+    `<button type="submit" class="btn${b.kind ? ` btn-${b.kind}` : ''}" value="${esc(b.value)}"${i === 0 ? ' autofocus' : ''}>${esc(b.label)}</button>`).join('');
   dlg.returnValue = '';
   dlg.showModal();
   return new Promise((resolve) => {
-    dlg.addEventListener('close', () => resolve(dlg.returnValue === 'ok'), { once: true });
+    dlg.addEventListener('close', () => resolve(dlg.returnValue), { once: true });
   });
 }
+
+// ===================================================================== project files & storage safety
+
+function saveProjectFile() {
+  if (!datasets.length) { toast('There is nothing to save yet.'); return; }
+  const stamp = new Date().toISOString().slice(0, 10);
+  download(`Data_Mapper_project_${stamp}.json`, JSON.stringify(buildProject(datasets, prefs)), 'application/json');
+  prefs.lastBackup = Date.now();
+  savePrefs();
+  updateStorageStatus();
+  toast('Project file saved to your downloads. Open it with "Open project file" on any computer.');
+  trackEvent('project-save');
+}
+
+/** Load a project file's text. Asks whether to add to or replace what's already loaded. */
+async function openProjectText(text, fileName = 'project file') {
+  let project;
+  try {
+    project = readProject(JSON.parse(text), defaultStyle);
+  } catch (err) {
+    toast(`Couldn't open ${fileName}: ${err.message}.`, 'error');
+    return;
+  }
+  if (!project.datasets.length) { toast(`${fileName} has no datasets in it.`, 'error'); return; }
+  let mode = 'add';
+  if (datasets.length) {
+    const n = project.datasets.length;
+    mode = await choiceDialog('Open project file', `This project has ${n} dataset${n === 1 ? '' : 's'}. Add ${n === 1 ? 'it' : 'them'} to what's on the map now, or replace everything on the map with ${n === 1 ? 'it' : 'them'}?`, [
+      { value: 'add', label: 'Add to the map', kind: 'primary' },
+      { value: 'replace', label: 'Replace everything', kind: 'danger' },
+      { value: '', label: 'Cancel' },
+    ]);
+    if (!mode) return;
+  }
+  if (mode === 'replace') {
+    if (replay.active) replay.close();
+    datasets.forEach((d) => removeLayers(d.id));
+    datasets = [];
+  }
+  for (const ds of project.datasets) {
+    ds.id = uid();
+    datasets.push(ds);
+    renderDataset(ds);
+  }
+  if (project.displayTimeZone !== null && mode === 'replace') {
+    prefs.displayTz = isValidTimeZone(project.displayTimeZone) ? project.displayTimeZone : '';
+    setDisplayTimeZone(prefs.displayTz);
+    fillZoneSelect($('#display-tz'), prefs.displayTz || deviceTimeZone(), '');
+  }
+  renderList();
+  save();
+  fitAll();
+  prefs.lastBackup = Date.now(); // what's loaded now matches a file the user has
+  savePrefs();
+  const pts = project.datasets.reduce((n, d) => n + d.points.length, 0);
+  toast(`Opened ${project.datasets.length} dataset${project.datasets.length === 1 ? '' : 's'} (${pts.toLocaleString()} points)${project.dropped ? `. ${project.dropped} damaged points were left out` : ''}.`);
+  announce('Project opened');
+  trackEvent('project-open');
+}
+
+function timeAgo(ts) {
+  const s = Math.round((Date.now() - ts) / 1000);
+  if (s < 90) return 'just now';
+  const m = Math.round(s / 60); if (m < 90) return `${m} minutes ago`;
+  const h = Math.round(m / 60); if (h < 36) return `${h} hours ago`;
+  const d = Math.round(h / 24); return `${d} day${d === 1 ? '' : 's'} ago`;
+}
+
+/** The "Keep your work safe" box under the datasets. */
+function updateStorageStatus() {
+  const el = $('#storage-status');
+  const box = $('#storage-box');
+  $('#btn-save-project').disabled = !datasets.length;
+  let msg, warn = false;
+  if (saveFailed) {
+    msg = "Your latest changes couldn't be saved in this browser. Save a project file so you don't lose them.";
+    warn = true;
+  } else if (!datasets.length) {
+    msg = 'Your data stays on this device. Open a project file to carry on from another computer.';
+  } else if (!prefs.lastBackup) {
+    msg = "Your data is only kept in this browser. If browsing data is cleared, it's gone. Save a project file as a backup, or to move it to another computer.";
+    warn = true;
+  } else if (prefs.lastChange > prefs.lastBackup) {
+    msg = `You've made changes since your last project file (${timeAgo(prefs.lastBackup)}). Save again to back them up.`;
+    warn = Date.now() - prefs.lastBackup > 7 * 86400000;
+  } else {
+    msg = `Backed up to a project file ${timeAgo(prefs.lastBackup)}.`;
+  }
+  el.textContent = msg;
+  box.classList.toggle('is-warn', warn);
+}
+
+$('#btn-save-project').addEventListener('click', saveProjectFile);
+$('#btn-open-project').addEventListener('click', () => { $('#project-input').value = ''; $('#project-input').click(); });
+$('#project-input').addEventListener('change', async (e) => {
+  const f = e.target.files[0];
+  if (f) openProjectText(await f.text(), f.name);
+});
 
 // ===================================================================== style controls (shared)
 
@@ -472,6 +717,23 @@ function openSettings(ds) {
   const name = $('#set-name');
   name.value = ds.name;
   name.oninput = () => { ds.name = name.value.trim() || 'Untitled'; $('#settings-title').textContent = `Style: ${ds.name}`; };
+  // Time zone correction (only for times that didn't state their own zone)
+  const tzField = $('#set-tz-field'), tzSel = $('#set-tz');
+  const adjustable = ds.points.some((p) => p.t != null && !p.tzx);
+  tzField.hidden = !adjustable;
+  if (adjustable) {
+    fillZoneSelect(tzSel, ds.timeZone || deviceTimeZone(), deviceTimeZone());
+    tzSel.onchange = () => {
+      const from = ds.timeZone || deviceTimeZone();
+      const to = tzSel.value;
+      if (!to || to === from) return;
+      shiftTimes(ds.points, from, to);
+      ds.timeZone = to;
+      renderDataset(ds);
+      replay.refresh();
+      announce(`Times in ${ds.name} now read as ${to.replace(/_/g, ' ')} time`);
+    };
+  }
   let pending = 0;
   renderStyleControls($('#set-style'), ds.style, () => {
     cancelAnimationFrame(pending);
@@ -604,6 +866,11 @@ function nextInQueue() {
     return;
   }
   const item = queue.shift();
+  if (looksLikeProjectText(item.text)) {
+    importDlg.close();
+    openProjectText(item.text, item.name).then(() => { if (queue.length) startQueue(queue); });
+    return;
+  }
   try {
     configureItem(item);
   } catch (err) {
@@ -623,8 +890,10 @@ function configureItem(item) {
     if (!pending.table.rows.length) throw new Error('no rows found');
     pending.map = guessMapping(pending.table);
   } else {
-    pending.result = format === 'geojson' ? geojsonToPoints(item.text) : format === 'gpx' ? gpxToPoints(item.text) : kmlToPoints(item.text);
+    const parse = format === 'geojson' ? geojsonToPoints : format === 'gpx' ? gpxToPoints : kmlToPoints;
+    pending.parseGeo = (zone) => parse(item.text, zone);
   }
+  fillZoneSelect($('#imp-tz'), isValidTimeZone(prefs.lastImportTz) ? prefs.lastImportTz : deviceTimeZone(), '');
 
   showImportStep('map');
   $('#import-file-label').textContent = item.name === 'Pasted data' ? 'From pasted data' : `From file: ${item.name}`;
@@ -686,7 +955,13 @@ function readMappingControls() {
     time: tm === 'split' ? v('#imp-time') : -1,
     dateOrder: $('#imp-dateorder').value,
     label: v('#imp-label'),
+    timeZone: importZone(),
   };
+}
+
+/** The zone chosen on the import screen, as an IANA name. */
+function importZone() {
+  return $('#imp-tz').value || deviceTimeZone();
 }
 
 function recompute() {
@@ -694,7 +969,10 @@ function recompute() {
     pending.map = readMappingControls();
     pending.result = tableToPoints(pending.table, pending.map);
     renderPreview();
+  } else {
+    pending.result = pending.parseGeo(importZone());
   }
+  updateZoneHint();
   const { points, skipped } = pending.result;
   const timed = points.filter((p) => p.t != null).length;
   const total = pending.format === 'table' ? pending.table.rows.length : points.length + skipped.length;
@@ -746,6 +1024,22 @@ function renderPreview() {
 }
 
 $('#imp-columns').addEventListener('change', () => { syncModeVisibility(); recompute(); });
+$('#imp-tz').addEventListener('change', recompute);
+
+/** Explain whether the import time zone matters for this file. */
+function updateZoneHint() {
+  const pts = pending.result.points;
+  const timed = pts.filter((p) => p.t != null).length;
+  const explicit = pts.filter((p) => p.tzx).length;
+  const field = $('#imp-tz-field'), sel = $('#imp-tz'), hint = $('#imp-tz-hint');
+  field.hidden = timed === 0;
+  sel.disabled = timed > 0 && explicit === timed;
+  hint.textContent = explicit === timed
+    ? 'These times already say which time zone they\'re in (for example "Z" or "+01:00"), so they\'re used exactly as written.'
+    : explicit
+      ? `${explicit.toLocaleString()} of the times say which time zone they're in and are used as written. This setting is for the other ${(timed - explicit).toLocaleString()}.`
+      : 'These times don\'t say which time zone they\'re in. Choose where they were recorded so they line up with your other data.';
+}
 
 $('#btn-import-go').addEventListener('click', () => {
   if (!pending?.result?.points.length) return;
@@ -758,7 +1052,10 @@ $('#btn-import-go').addEventListener('click', () => {
     skipped: pending.result.skipped,
     source: pending.item.name,
     createdAt: Date.now(),
+    timeZone: importZone(),
   };
+  prefs.lastImportTz = $('#imp-tz').value ? importZone() : '';
+  savePrefs();
   addDataset(ds);
   addedThisSession++;
   trackEvent(pending.item.name === 'Pasted data' ? 'import-paste' : 'import-file');
@@ -816,14 +1113,17 @@ function addDataset(ds) {
   renderDataset(ds);
   renderList();
   save();
+  // Ask the browser to keep our data even when space runs low (most agree silently)
+  store.requestPersistence();
 }
 
 function loadSamples() {
   SAMPLES.forEach((s, k) => {
     const table = parseTable(s.text);
-    const res = tableToPoints(table, guessMapping(table));
+    const timeZone = s.timeZone || deviceTimeZone();
+    const res = tableToPoints(table, { ...guessMapping(table), timeZone });
     const style = { ...defaultStyle(datasets.length, res.points.some((p) => p.t != null)), ...s.style };
-    addDataset({ id: uid(), name: s.name, visible: true, style, points: res.points, skipped: res.skipped, source: 'Sample', createdAt: Date.now() + k });
+    addDataset({ id: uid(), name: s.name, visible: true, style, points: res.points, skipped: res.skipped, source: 'Sample', createdAt: Date.now() + k, timeZone });
   });
   fitAll();
   announce('Sample data added');
@@ -1019,9 +1319,22 @@ if ('launchQueue' in window) {
 
 // ===================================================================== start-up
 
+// "Show times in" setting
+$('#display-tz').addEventListener('change', (e) => {
+  prefs.displayTz = e.target.value;
+  setDisplayTimeZone(prefs.displayTz);
+  savePrefs();
+  map.closePopup();
+  renderList();
+  scheduleFocusTargets();
+  announce(`Times are now shown in ${displayTimeZone().replace(/_/g, ' ')} time`);
+});
+
 (async function init() {
   const savedPrefs = await store.get('prefs');
   if (savedPrefs) prefs = { ...prefs, ...savedPrefs };
+  setDisplayTimeZone(prefs.displayTz);
+  fillZoneSelect($('#display-tz'), prefs.displayTz || deviceTimeZone(), '');
   const base = BASEMAPS.find((b) => b.id === prefs.basemap) || BASEMAPS[0];
   baseLayers[base.name].addTo(map);
 
@@ -1032,6 +1345,8 @@ if ('launchQueue' in window) {
     fitAll();
   }
   renderList();
+  updateStorageStatus();
+  setInterval(updateStorageStatus, 60000); // keep "x minutes ago" current
   // On phones, show the "No data yet" panel straight away so people know where to start
   if (!datasets.length && matchMedia('(max-width: 760px)').matches) {
     panel.classList.add('open');

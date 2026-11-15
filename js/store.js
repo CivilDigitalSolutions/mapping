@@ -38,9 +38,25 @@ export async function set(key, value) {
       tx.objectStore(STORE).put(value, key);
       tx.oncomplete = resolve;
       tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error || new Error('Save aborted')); // e.g. storage full
     });
     return true;
   } catch {
     return false;
   }
+}
+
+/** Ask the browser not to clear our data when space runs low. Returns true if it agreed. */
+export async function requestPersistence() {
+  try {
+    if (!navigator.storage?.persist) return false;
+    if (await navigator.storage.persisted()) return true;
+    return await navigator.storage.persist();
+  } catch {
+    return false;
+  }
+}
+
+export async function isPersisted() {
+  try { return !!(await navigator.storage?.persisted?.()); } catch { return false; }
 }

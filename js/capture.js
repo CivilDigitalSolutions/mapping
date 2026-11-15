@@ -8,6 +8,7 @@
 // effect on the output, and the camera can move on its own to follow a route.
 
 import { markerSvg } from './icons.js';
+import { PointLayer } from './pointlayer.js';
 
 const CRS = L.CRS.EPSG3857;
 const TILE = 256;
@@ -191,9 +192,10 @@ function scaledSvg(html, scale) {
  */
 export async function drawOverlays(ctx, map, cam) {
   const scale = cam.scale;
-  const lines = [], arrows = [], markers = [], heads = [];
+  const lines = [], arrows = [], markers = [], heads = [], pointLayers = [];
   map.eachLayer((l) => {
-    if (l instanceof L.Polyline) lines.push(l);
+    if (l instanceof PointLayer) pointLayers.push(l);
+    else if (l instanceof L.Polyline) lines.push(l);
     else if (l instanceof L.Marker && l.options.icon instanceof L.DivIcon) {
       const cls = l.options.icon.options.className || '';
       if (cls.includes('dm-arrow')) arrows.push(l);
@@ -269,6 +271,10 @@ export async function drawOverlays(ctx, map, cam) {
     ctx.drawImage(img, left, top, w * scale, h * scale);
     ctx.restore();
   };
+  // Each dataset's canvas markers, in dataset order
+  pointLayers.sort((a, b) => L.stamp(a) - L.stamp(b));
+  for (const pl of pointLayers) await pl.drawTo(ctx, cam);
+
   markers.sort((a, b) => (a.getLatLng().lat < b.getLatLng().lat ? 1 : -1));
   for (const m of markers) await drawMarker(m, false);
   for (const m of heads) await drawMarker(m, true);

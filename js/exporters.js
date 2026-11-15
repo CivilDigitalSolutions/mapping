@@ -10,7 +10,7 @@ import {
   makeCamera, fitCamera, fitZoom, boundsCenter, currentViewCamera, tileSource, tilesFor, preloadTiles,
   drawTiles, drawOverlays, drawLegend, drawTitleClock, drawProgress, drawAttribution, markerPng,
 } from './capture.js';
-import { formatDateTime, formatDuration, formatDistance } from './dates.js';
+import { formatDateTime, formatDuration, formatDistance, displayTimeZone } from './dates.js';
 import { distanceMetres } from './coords.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -359,7 +359,7 @@ export async function buildPdf({ map, replay, datasets, sequenceOf, opts, onProg
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...grey);
-  doc.text('Route distance is measured in a straight line between consecutive points, in the order the points are joined on the map.', M, y);
+  doc.text(pdfText(`All times are shown in ${displayTimeZone().replace(/_/g, ' ')} time. Route distance is measured in a straight line between consecutive points, in the order the points are joined on the map.`), M, y);
   y += 8;
 
   if (opts.notes && opts.notes.trim()) {

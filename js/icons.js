@@ -38,10 +38,7 @@ export function markerSvg({ shape = 'circle', color = '#0072B2', size = 28, labe
   let text = '';
   if (label !== '' && label !== null && label !== undefined) {
     const str = String(label);
-    const fs = (str.length >= 4 ? 8 : str.length === 3 ? 9.5 : 12) - (shape === 'flag' ? 2 : 0);
-    const y = shape === 'pin' ? 12 : shape === 'flag' ? 10.5 : shape === 'triangle' ? 20 : 16;
-    const x = shape === 'flag' ? 17 : 16;
-    const tc = shape === 'pin' ? '#111' : contrastText(color);
+    const { x, y, fs, color: tc } = labelSpec(shape, color, str);
     text = `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-weight="700" font-size="${fs}" fill="${tc}">${escapeXml(str)}</text>`;
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true" focusable="false" style="overflow:visible;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.45))">${def.svg(fill, stroke, color)}${text}</svg>`;
@@ -62,4 +59,52 @@ export function arrowSvg(color, angleDeg) {
 
 function escapeXml(s) {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
+}
+
+/**
+ * Where the sequence number sits inside a marker, in the 32×32 marker grid.
+ * Shared by the SVG markers and the canvas layer so both look the same.
+ */
+export function labelSpec(shape, color, str) {
+  const fs = (str.length >= 4 ? 8 : str.length === 3 ? 9.5 : 12) - (shape === 'flag' ? 2 : 0);
+  const y = shape === 'pin' ? 12 : shape === 'flag' ? 10.5 : shape === 'triangle' ? 20 : 16;
+  const x = shape === 'flag' ? 17 : 16;
+  return { x, y, fs, color: shape === 'pin' ? '#111' : contrastText(color) };
+}
+
+// ------------------------------------------------------------------ canvas sprites
+
+const SPRITE_MARGIN = 4; // room for the drop shadow
+const sprites = new Map();
+
+/**
+ * A pre-drawn marker image for the canvas layer, at `dpr` device pixels per CSS pixel.
+ * Returns { canvas, ready, promise, w, h, ax, ay } — sizes and anchor are in CSS pixels.
+ */
+export function spriteFor(shape, color, size, dpr = 1) {
+  const key = `${shape}|${color}|${size}|${dpr}`;
+  if (sprites.has(key)) return sprites.get(key);
+  const w = size + SPRITE_MARGIN * 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = Math.ceil(w * dpr);
+  const [ax, ay] = anchorFor(shape, size);
+  const entry = { canvas, ready: false, w, h: w, ax: ax + SPRITE_MARGIN, ay: ay + SPRITE_MARGIN, size };
+  entry.promise = new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const ctx = canvas.getContext('2d');
+      ctx.shadowColor = 'rgba(0,0,0,.45)';
+      ctx.shadowBlur = 3 * dpr;
+      ctx.shadowOffsetY = 1 * dpr;
+      ctx.drawImage(img, SPRITE_MARGIN * dpr, SPRITE_MARGIN * dpr, size * dpr, size * dpr);
+      entry.ready = true;
+      resolve(entry);
+    };
+    img.onerror = () => resolve(entry);
+    const svg = markerSvg({ shape, color, size: size * dpr }).replace(/style="[^"]*"/, '');
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  });
+  sprites.set(key, entry);
+  if (sprites.size > 400) sprites.delete(sprites.keys().next().value);
+  return entry;
 }

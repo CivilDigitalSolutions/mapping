@@ -2,7 +2,7 @@
 // into a table and then into map points.
 /* global Papa */
 import { parseLat, parseLon, parseCombined, guessCombinedOrder, parseComponent } from './coords.js';
-import { parseDateTime, parseDateAndTime, guessDateOrder } from './dates.js';
+import { parseDateTime, parseDateAndTime, guessDateOrder, hasExplicitZone } from './dates.js';
 
 // ---------------------------------------------------------------- detection
 
@@ -158,14 +158,22 @@ export function tableToPoints(table, map) {
       return;
     }
 
-    let t = null;
-    if (map.datetime >= 0) t = parseDateTime(r[map.datetime], map.dateOrder);
-    else if (map.date >= 0) t = map.time >= 0 ? parseDateAndTime(r[map.date], r[map.time], map.dateOrder) : parseDateTime(r[map.date], map.dateOrder);
+    // Times are read in map.timeZone unless the value states its own zone (tzx)
+    let t = null, tzx = false;
+    const zone = map.timeZone;
+    if (map.datetime >= 0) {
+      t = parseDateTime(r[map.datetime], map.dateOrder, zone);
+      tzx = hasExplicitZone(r[map.datetime]);
+    } else if (map.date >= 0) {
+      t = map.time >= 0 ? parseDateAndTime(r[map.date], r[map.time], map.dateOrder, zone) : parseDateTime(r[map.date], map.dateOrder, zone);
+      tzx = hasExplicitZone(map.time >= 0 && r[map.time] ? r[map.time] : r[map.date]);
+    }
 
     const props = {};
     headers.forEach((h, i) => { if (!usedCols.has(i) && r[i] !== '') props[h] = r[i]; });
     points.push({
       lat, lon, t,
+      ...(t !== null && tzx ? { tzx: true } : {}),
       label: map.label >= 0 ? r[map.label] : '',
       props,
       src: ri + 1,
@@ -176,7 +184,7 @@ export function tableToPoints(table, map) {
 
 // ---------------------------------------------------------------- GeoJSON
 
-export function geojsonToPoints(text) {
+export function geojsonToPoints(text, zone) {
   const json = JSON.parse(text);
   const features = [];
   const walk = (obj) => {
@@ -198,17 +206,18 @@ export function geojsonToPoints(text) {
     if (!g) { skipped.push({ row: fi + 1, reason: 'Feature has no geometry' }); return; }
     const tKey = Object.keys(props).find((k) => timeKeys.includes(k.toLowerCase()));
     const nKey = Object.keys(props).find((k) => nameKeys.includes(k.toLowerCase()));
-    const baseT = tKey ? parseDateTime(props[tKey]) : null;
+    const baseT = tKey ? parseDateTime(props[tKey], 'dmy', zone) : null;
     const coordTimes = props.coordTimes || props.times || null; // common in GPX→GeoJSON conversions
 
     const pushCoord = (c, i) => {
       if (!Array.isArray(c) || c.length < 2) return;
       const [lon, lat] = c;
       if (Math.abs(lat) > 90 || Math.abs(lon) > 180) { skipped.push({ row: fi + 1, reason: `Coordinates out of range ${c}` }); return; }
-      const t = coordTimes && coordTimes[i] ? parseDateTime(coordTimes[i]) : baseT;
+      const raw = coordTimes && coordTimes[i] ? coordTimes[i] : tKey ? props[tKey] : null;
+      const t = coordTimes && coordTimes[i] ? parseDateTime(coordTimes[i], 'dmy', zone) : baseT;
       const p = { ...props }; delete p.coordTimes; delete p.times;
       if (c.length > 2) p.elevation = c[2];
-      points.push({ lat, lon, t, label: nKey ? String(props[nKey]) : '', props: stringifyProps(p), src: fi + 1 });
+      points.push({ lat, lon, t, ...zoneFlag(t, raw), label: nKey ? String(props[nKey]) : '', props: stringifyProps(p), src: fi + 1 });
     };
     switch (g.type) {
       case 'Point': pushCoord(g.coordinates, 0); break;
@@ -234,7 +243,7 @@ function stringifyProps(p) {
 
 // ---------------------------------------------------------------- GPX / KML
 
-export function gpxToPoints(text) {
+export function gpxToPoints(text, zone) {
   const doc = new DOMParser().parseFromString(text, 'application/xml');
   if (doc.querySelector('parsererror')) throw new Error('This GPX file could not be read (invalid XML).');
   const points = [];
@@ -250,12 +259,13 @@ export function gpxToPoints(text) {
     const sym = get('sym'); if (sym) props.symbol = sym;
     props.type = n.tagName === 'wpt' ? 'Waypoint' : n.tagName === 'trkpt' ? 'Track point' : 'Route point';
     const time = get('time');
-    points.push({ lat, lon, t: time ? parseDateTime(time) : null, label: get('name'), props, src: i + 1 });
+    const t = time ? parseDateTime(time, 'dmy', zone) : null;
+    points.push({ lat, lon, t, ...zoneFlag(t, time), label: get('name'), props, src: i + 1 });
   });
   return { points, skipped: [] };
 }
 
-export function kmlToPoints(text) {
+export function kmlToPoints(text, zone) {
   const doc = new DOMParser().parseFromString(text, 'application/xml');
   if (doc.querySelector('parsererror')) throw new Error('This KML file could not be read (invalid XML).');
   const points = [];
@@ -281,7 +291,8 @@ export function kmlToPoints(text) {
     if (gxCoords.length) {
       gxCoords.forEach((c, i) => {
         const [lon, lat] = c.split(/\s+/).map(Number);
-        if (Number.isFinite(lat) && Number.isFinite(lon)) points.push({ lat, lon, t: whens[i] ? parseDateTime(whens[i]) : null, label: name, props, src: pi + 1 });
+        const t = whens[i] ? parseDateTime(whens[i], 'dmy', zone) : null;
+        if (Number.isFinite(lat) && Number.isFinite(lon)) points.push({ lat, lon, t, ...zoneFlag(t, whens[i]), label: name, props, src: pi + 1 });
       });
       return;
     }
@@ -290,9 +301,15 @@ export function kmlToPoints(text) {
     Array.from(coordEls).forEach((ce) => {
       ce.textContent.trim().split(/\s+/).forEach((tuple) => {
         const [lon, lat] = tuple.split(',').map(Number);
-        if (Number.isFinite(lat) && Number.isFinite(lon)) points.push({ lat, lon, t: when ? parseDateTime(when) : null, label: name, props, src: pi + 1 });
+        const t = when ? parseDateTime(when, 'dmy', zone) : null;
+        if (Number.isFinite(lat) && Number.isFinite(lon)) points.push({ lat, lon, t, ...zoneFlag(t, when), label: name, props, src: pi + 1 });
       });
     });
   });
   return { points, skipped };
+}
+
+/** { tzx: true } when a parsed time stated its own zone, so later zone changes leave it alone. */
+function zoneFlag(t, raw) {
+  return t !== null && t !== undefined && hasExplicitZone(raw) ? { tzx: true } : {};
 }
