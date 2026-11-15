@@ -13,6 +13,8 @@ A progressive web app (PWA) for putting coordinate data on a map. Upload CSV fil
 - **Per-dataset styling:** 9 marker shapes (circle, square, triangle, diamond, star, hexagon, cross, waypoint pin, flag), a colour-blind-friendly palette or any custom colour, and marker size.
 - **Split one file into many datasets:** choose a column such as Vehicle or Device when importing. Columns like these are suggested automatically, and each group becomes its own dataset with its own colour (and shape, after 10). *Show all / Hide all* in the panel helps with many datasets.
 - **Colour by value:** markers and route lines can be shaded by speed (worked out from times and distances, in mph, km/h or m/s), by time, or by any numeric column. The colour-blind-friendly scale (viridis) runs from the 2nd to the 98th percentile, so one bad reading can't flatten the colours. It appears on the dataset's card and in PDF and video legends, and popups show each point's speed. During replay the moving line uses the dataset's own colour, while the markers keep their value colours.
+- **Filters:** one filter for the whole map, in the Datasets panel. It can limit the date and time range, the time of day every day (e.g. 08:00–12:00, or overnight 22:00–06:00), and a rule on a column, a point's name or its calculated speed (*is*, *is not*, *contains*, *is at least*, *is at most*). The filter applies everywhere: the map, numbering, Previous/Next, replay, the table, stops and problems, PDF and video, and GeoJSON/CSV exports. Cards show "*x* of *y* points shown", PDFs say what they were filtered to, and the filter is remembered between visits.
+- **Stops, gaps and GPS jumps:** found automatically for each dataset that has times. A stop is staying within 50 m for 5+ minutes; a gap is nothing recorded for 10+ minutes while moving; a jump is a move faster than 150 mph (240 km/h), which is usually a bad GPS reading. All of these settings can be changed. Each is marked on the map with a badge you can click or Tab to, summarised on the dataset's card with a full list, and included in the PDF. A jump can be removed in one click, with Undo.
 - **Time-ordered tracks:** points are joined by date/time (or file order) with solid, dashed or dotted lines, direction arrows and optional sequence numbers on the markers.
 - **Point details:** date and time, coordinates (with a copy button), and the distance and time since the previous point, plus every other column from the row. *Previous* and *Next* buttons step along the track.
 - **Route replay:** a time slider plays the routes back. You can scrub to any moment, step from point to point, pick the speed (whole route in 15 s to 2 min, real time, or 1 min/10 min/1 hour/1 day per second), keep the whole trail or only the last 15 minutes, hour or day, and have the map follow the moving markers. Space plays and pauses, and Esc closes the replay.
@@ -75,7 +77,7 @@ npm run test:e2e     # browser tests: the whole app in headless Chromium (about 
 npm run test:all     # both
 ```
 
-The browser tests (`tests/e2e/`) cover importing every file type, splitting files, time zones, the map, popups and keyboard access, styles and colour by value, Undo, replay, PDF and video exports, project files and storage warnings, accessibility checks (axe-core) in light and dark mode, and speed with 25,000 points. They start their own web server and use stand-in map tiles, so they never touch the internet.
+The browser tests (`tests/e2e/`) cover importing every file type, splitting files, time zones, filters, stops and GPS jumps, the map, popups and keyboard access, styles and colour by value, Undo, replay, PDF and video exports, project files and storage warnings, accessibility checks (axe-core) in light and dark mode, and speed with 25,000 points. They start their own web server and use stand-in map tiles, so they never touch the internet.
 
 GitHub runs all of these on every push and pull request. The site is only deployed when they all pass.
 
@@ -103,6 +105,9 @@ js/replay.js          Route replay / time slider
 js/pointlayer.js      Canvas marker layer (fast drawing, hit-testing, keyboard targets)
 js/project.js         Project file save / open
 js/colour.js          Colour by value (speed, time, columns) and colour scale
+js/filters.js         Filter logic: date range, time of day, column / speed rules
+js/filter-ui.js       The Filter and "Stops and problems" boxes in the panel
+js/analysis.js        Finding stops, gaps in the recording and GPS jumps
 js/capture.js         Draws the map onto a canvas for exports
 js/exporters.js       Video recording and PDF report
 js/samples.js         Built-in sample datasets

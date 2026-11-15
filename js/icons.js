@@ -108,3 +108,26 @@ export function spriteFor(shape, color, size, dpr = 1) {
   if (sprites.size > 400) sprites.delete(sprites.keys().next().value);
   return entry;
 }
+
+// ------------------------------------------------------------------ stop / gap / jump badges
+
+const BADGE = {
+  stop: { bg: '#1f2937', icon: '<rect x="9" y="7" width="3" height="10" rx="1" fill="#fff"/><rect x="14.5" y="7" width="3" height="10" rx="1" fill="#fff"/>' },
+  gap: { bg: '#5b6472', icon: '<path d="M8 12h2.5M12 12h2.5M16 12h2.5" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>' },
+  jump: { bg: '#b42318', icon: '<path d="M13 6.5 L19.5 18 H6.5 Z" fill="#fff"/><path d="M13 10.5v3.5" stroke="#b42318" stroke-width="2" stroke-linecap="round"/><circle cx="13" cy="16" r="1.1" fill="#b42318"/>' },
+};
+
+/**
+ * A small labelled badge ("pill") for a stop, gap or GPS jump.
+ * Returns { svg, w, h } in CSS pixels. Drawn as SVG so exports can include it.
+ */
+export function eventBadge(kind, text) {
+  const b = BADGE[kind] || BADGE.stop;
+  const label = escapeXml(String(text));
+  const h = 24;
+  const w = Math.round(34 + label.length * 7.4); // room for bold text in any system font
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true" focusable="false">` +
+    `<rect x="1" y="1" width="${w - 2}" height="${h - 2}" rx="${(h - 2) / 2}" fill="${b.bg}" stroke="#fff" stroke-width="2"/>${b.icon}` +
+    `<text x="24" y="16.2" font-family="system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#fff">${label}</text></svg>`;
+  return { svg, w, h };
+}

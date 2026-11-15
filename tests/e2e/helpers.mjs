@@ -165,3 +165,23 @@ export async function waitForText(locator, re, timeout = 5000) {
   }
   throw new Error(`Expected text matching ${re}, last saw: ${JSON.stringify(last)}`);
 }
+
+/**
+ * A van's morning with exactly one 10-minute stop, one 20-minute gap in the
+ * recording (while it moved 3 km) and one bad GPS reading 50 km away.
+ */
+export function eventsCsv() {
+  const rows = ['Vehicle,Latitude,Longitude,Time'];
+  const t0 = Date.UTC(2024, 2, 14, 8, 0);
+  let lat = 51.5;
+  const add = (la, mins) => rows.push(`VAN-09,${la.toFixed(6)},-0.1,${new Date(t0 + mins * 60000).toISOString()}`);
+  let m = 0;
+  for (; m <= 4; m++) { add(lat, m); lat += 0.0027; }            // moving ~300 m a minute
+  for (let k = 0; k <= 10; k++, m++) add(lat + (k % 2) * 0.00003, m); // parked 10 minutes (wobbling ~3 m)
+  for (let k = 0; k < 5; k++, m++) { lat += 0.0027; add(lat, m); }  // moving again
+  m += 20; lat += 0.027;                                           // nothing for 20 min, 3 km further on
+  for (let k = 0; k < 5; k++, m++) { add(lat, m); lat += 0.0027; }
+  add(lat + 0.45, m++);                                            // one reading 50 km away
+  for (let k = 0; k < 4; k++, m++) { add(lat, m); lat += 0.0027; }
+  return rows.join('\n') + '\n';
+}

@@ -62,6 +62,75 @@
         <label for="display-tz">Show times in</label>
         <select id="display-tz"></select>
       </div>
+
+      <details class="tool-box" id="filter-box">
+        <summary>
+          <span class="tool-title">Filter</span>
+          <span class="tool-status" id="filter-summary">Showing everything</span>
+        </summary>
+        <form class="tool-body" id="filter-form" novalidate>
+          <fieldset class="tool-group">
+            <legend>Date and time</legend>
+            <div class="tool-row">
+              <label>From <input type="datetime-local" id="flt-from"></label>
+              <label>To <input type="datetime-local" id="flt-to"></label>
+            </div>
+          </fieldset>
+          <fieldset class="tool-group">
+            <legend>Time of day, every day</legend>
+            <div class="tool-row">
+              <label>From <input type="time" id="flt-tod-from"></label>
+              <label>To <input type="time" id="flt-tod-to"></label>
+            </div>
+          </fieldset>
+          <fieldset class="tool-group">
+            <legend>Only points where</legend>
+            <div class="tool-row">
+              <label class="sr-only" for="flt-field">Column</label>
+              <select id="flt-field"></select>
+              <label class="sr-only" for="flt-op">Condition</label>
+              <select id="flt-op"></select>
+              <label class="sr-only" for="flt-value">Value</label>
+              <input type="text" id="flt-value" list="flt-values" autocomplete="off" placeholder="Value">
+              <datalist id="flt-values"></datalist>
+            </div>
+          </fieldset>
+          <p class="hint">Times are read in the zone chosen under "Show times in". A column rule only affects datasets that have that column.</p>
+          <button type="button" class="btn btn-sm" id="flt-clear">Clear filter</button>
+        </form>
+      </details>
+
+      <details class="tool-box" id="analysis-box">
+        <summary>
+          <span class="tool-title">Stops and problems</span>
+          <span class="tool-status" id="analysis-summary"></span>
+        </summary>
+        <form class="tool-body" id="analysis-form" novalidate>
+          <label class="tool-check"><input type="checkbox" id="an-show"> Mark stops, gaps and GPS jumps on the map</label>
+          <fieldset class="tool-group">
+            <legend>A stop is staying put</legend>
+            <div class="tool-row">
+              <label>for at least <input type="number" id="an-stop-min" min="1" max="1440" step="1" inputmode="numeric"> minutes</label>
+              <label>within <input type="number" id="an-stop-radius" min="5" max="2000" step="5" inputmode="numeric"> metres</label>
+            </div>
+          </fieldset>
+          <fieldset class="tool-group">
+            <legend>A gap is nothing recorded</legend>
+            <div class="tool-row">
+              <label>for at least <input type="number" id="an-gap-min" min="1" max="10080" step="1" inputmode="numeric"> minutes, while moving</label>
+            </div>
+          </fieldset>
+          <fieldset class="tool-group">
+            <legend>A GPS jump is moving faster than</legend>
+            <div class="tool-row">
+              <label class="sr-only" for="an-jump">Speed</label>
+              <input type="number" id="an-jump" min="10" max="5000" step="10" inputmode="numeric">
+              <label class="sr-only" for="an-unit">Speed units</label>
+              <select id="an-unit"><option value="mph">mph</option><option value="kmh">km/h</option></select>
+            </div>
+          </fieldset>
+        </form>
+      </details>
       <div id="empty-state" class="empty-state">
         <p><strong>No data yet.</strong></p>
         <p>Upload a CSV file or paste rows of latitude and longitude, with dates and times if you have them.</p>
@@ -320,6 +389,8 @@
           <li><strong>Pick a marker:</strong> give each dataset its own shape (circle, square, triangle, waypoint pin, flag and others) and colour so you can tell them apart.</li>
           <li><strong>One file, many vehicles:</strong> if a file has a column such as Vehicle or Device, choose it under <em>Split into separate datasets by</em>. Each one becomes its own dataset with its own colour.</li>
           <li><strong>Colour by value:</strong> in a dataset's <em>Style</em>, choose <em>Colour markers and line by</em> speed, time or any number column. Low values are dark purple and high values are yellow. The scale shows on the dataset's card and in exports.</li>
+          <li><strong>Filter:</strong> open <em>Filter</em> in the Datasets panel to show only a date and time range, certain hours of each day, or points matching a rule such as "Vehicle is VAN-02" or "Speed is at least 30". Everything follows the filter, including replay and exports. Press <em>Clear filter</em> to see everything again.</li>
+          <li><strong>Stops and problems:</strong> stops, gaps in the recording and possible GPS jumps are marked on the map and listed on each dataset's card (<em>List them</em>). Change what counts under <em>Stops and problems</em> in the Datasets panel. To remove a bad GPS reading, open its "Jump" badge and choose <em>Remove this point</em>.</li>
           <li><strong>Follow the path:</strong> when points have dates and times, they're joined in time order with a line. Arrows show the direction of travel. You can turn this off in the dataset's settings.</li>
           <li><strong>Replay:</strong> press <em>Replay</em> to play the routes back over time. Drag the slider to any moment, use the step buttons to jump from point to point, and choose the speed and how much of the trail stays visible.</li>
           <li><strong>Export:</strong> press <em>Export</em> to save a PDF report for a client (map, legend, summary and point tables), or a video of the replay for presentations. Videos can keep the map still or follow the route as it moves. The <em>Save video</em> button in the replay bar does the same.</li>

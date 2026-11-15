@@ -67,7 +67,9 @@ export const PointLayer = L.Layer.extend({
     this.redraw();
   },
 
+  /** Is point i drawn? Points can be hidden by the filter (options.mask) and by replay (time window). */
   isShown(i) {
+    if (this.options.mask && !this.options.mask[i]) return false;
     if (!this._window) return true;
     const t = this.ds.points[i].t;
     return t !== null && t !== undefined && t >= this._window[0] && t <= this._window[1];
@@ -201,7 +203,7 @@ export const PointLayer = L.Layer.extend({
     let c = 0;
     for (let k = 0; k < n; k++) {
       const i = this._order[k];
-      if (this._window && !this.isShown(i)) continue;
+      if ((this._window || this.options.mask) && !this.isShown(i)) continue;
       const x = this._x0[i] * scale - ox, y = this._y0[i] * scale - oy;
       if (x < -m || y < -m || x > bw + m || y > bh + m) continue;
       if (!this.labels.size && occupied(x + m, y + m)) continue; // an identical marker is already drawn here

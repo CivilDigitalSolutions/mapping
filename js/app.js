@@ -12,7 +12,8 @@ import { loadSamples, openImport } from './import-flow.js';
 import { baseLayers, fitAll, map, renderDataset, replay } from './mapview.js';
 import { panel, panelBtn, renderList, updateStorageStatus, updateStorageUsage } from './panel.js';
 import { saveProjectFile } from './project-ui.js';
-import { datasets, hooks, onChange, prefs } from './state.js';
+import { completePrefs, datasets, hooks, onChange, prefs } from './state.js';
+import { initFilterUi } from './filter-ui.js';
 import { fillZoneSelect } from './style-controls.js';
 import { $, $$, download, toast } from './util.js';
 
@@ -36,6 +37,7 @@ $('#btn-sample-csv').addEventListener('click', () => download('sample-track.csv'
 (async function init() {
   const savedPrefs = await store.get('prefs');
   if (savedPrefs) Object.assign(prefs, savedPrefs);
+  completePrefs(); // settings added since these preferences were saved get their defaults
   setDisplayTimeZone(prefs.displayTz);
   fillZoneSelect($('#display-tz'), prefs.displayTz || deviceTimeZone(), '');
   const base = BASEMAPS.find((b) => b.id === prefs.basemap) || BASEMAPS[0];
@@ -48,6 +50,7 @@ $('#btn-sample-csv').addEventListener('click', () => download('sample-track.csv'
     fitAll();
   }
   renderList();
+  initFilterUi();
   updateStorageStatus();
   updateStorageUsage();
   setInterval(() => { updateStorageStatus(); updateStorageUsage(); }, 60000); // keep "x minutes ago" and usage current
