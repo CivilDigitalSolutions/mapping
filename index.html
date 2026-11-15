@@ -119,6 +119,7 @@
             <div class="tool-row">
               <label>for at least <input type="number" id="an-gap-min" min="1" max="10080" step="1" inputmode="numeric"> minutes, while moving</label>
             </div>
+            <p class="hint">…and at least 3 times longer than usual for that dataset, so data recorded every half hour on purpose isn't flagged at every step.</p>
           </fieldset>
           <fieldset class="tool-group">
             <legend>A GPS jump is moving faster than</legend>
@@ -390,7 +391,7 @@
           <li><strong>One file, many vehicles:</strong> if a file has a column such as Vehicle or Device, choose it under <em>Split into separate datasets by</em>. Each one becomes its own dataset with its own colour.</li>
           <li><strong>Colour by value:</strong> in a dataset's <em>Style</em>, choose <em>Colour markers and line by</em> speed, time or any number column. Low values are dark purple and high values are yellow. The scale shows on the dataset's card and in exports.</li>
           <li><strong>Filter:</strong> open <em>Filter</em> in the Datasets panel to show only a date and time range, certain hours of each day, or points matching a rule such as "Vehicle is VAN-02" or "Speed is at least 30". Everything follows the filter, including replay and exports. Press <em>Clear filter</em> to see everything again.</li>
-          <li><strong>Stops and problems:</strong> stops, gaps in the recording and possible GPS jumps are marked on the map and listed on each dataset's card (<em>List them</em>). Change what counts under <em>Stops and problems</em> in the Datasets panel. To remove a bad GPS reading, open its "Jump" badge and choose <em>Remove this point</em>.</li>
+          <li><strong>Stops and problems:</strong> a pause sign marks each stop (with how long it lasted), a short "//" break across the line marks a gap in the recording, and a small red triangle marks a possible GPS jump. Select one for details. They're also listed on each dataset's card (<em>List them</em>). Change what counts under <em>Stops and problems</em> in the Datasets panel. To remove a bad GPS reading, open its triangle and choose <em>Remove this point</em>.</li>
           <li><strong>Follow the path:</strong> when points have dates and times, they're joined in time order with a line. Arrows show the direction of travel. You can turn this off in the dataset's settings.</li>
           <li><strong>Replay:</strong> press <em>Replay</em> to play the routes back over time. Drag the slider to any moment, use the step buttons to jump from point to point, and choose the speed and how much of the trail stays visible.</li>
           <li><strong>Export:</strong> press <em>Export</em> to save a PDF report for a client (map, legend, summary and point tables), or a video of the replay for presentations. Videos can keep the map still or follow the route as it moves. The <em>Save video</em> button in the replay bar does the same. Under <em>Your branding</em>, add your organisation's logo and name to put them on every report and video.</li>

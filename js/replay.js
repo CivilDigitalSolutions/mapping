@@ -6,7 +6,7 @@
 // moment and a pulsing head marker interpolated between points. Datasets with
 // no dates stay on the map as normal.
 
-import { markerSvg, anchorFor, eventBadge } from './icons.js';
+import { markerSvg, anchorFor, textLabel } from './icons.js';
 import { formatDateTime, formatDuration } from './dates.js';
 import { getScale, binColour } from './colour.js';
 
@@ -259,8 +259,9 @@ export function createReplay({ map, getDatasets, layers, announce }) {
     tr.stopMarker.setLatLng(head);
     if (text !== tr.stopText) {
       tr.stopText = text;
-      const { svg, w, h } = eventBadge('stop', text);
-      tr.stopMarker.setIcon(L.divIcon({ className: 'dm-event dm-event-stop dm-replay-stop', html: svg, iconSize: [w, h], iconAnchor: [w / 2, h + tr.headSize * 0.75] }));
+      // Plain outlined text just to the right of the moving marker
+      const { svg, w, h } = textLabel(text);
+      tr.stopMarker.setIcon(L.divIcon({ className: 'dm-event dm-replay-stop', html: svg, iconSize: [w, h], iconAnchor: [-(tr.headSize * 0.8), h / 2] }));
     }
   }
 

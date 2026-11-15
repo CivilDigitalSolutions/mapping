@@ -109,25 +109,60 @@ export function spriteFor(shape, color, size, dpr = 1) {
   return entry;
 }
 
-// ------------------------------------------------------------------ stop / gap / jump badges
+// ------------------------------------------------------------------ stop / gap / jump symbols
+// Small, quiet symbols that don't hide the route: no pills or boxes. Text, where
+// there is any, has a thin white outline so it reads on any map. All are SVG so
+// the PDF and video exports can draw them too.
 
-const BADGE = {
-  stop: { bg: '#1f2937', icon: '<rect x="9" y="7" width="3" height="10" rx="1" fill="#fff"/><rect x="14.5" y="7" width="3" height="10" rx="1" fill="#fff"/>' },
-  gap: { bg: '#5b6472', icon: '<path d="M8 12h2.5M12 12h2.5M16 12h2.5" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>' },
-  jump: { bg: '#b42318', icon: '<path d="M13 6.5 L19.5 18 H6.5 Z" fill="#fff"/><path d="M13 10.5v3.5" stroke="#b42318" stroke-width="2" stroke-linecap="round"/><circle cx="13" cy="16" r="1.1" fill="#b42318"/>' },
-};
+const LABEL_FONT = 'system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif';
+const svgOpen = (w, h) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true" focusable="false">`;
+
+/** Small bold text with a white outline instead of a box behind it. */
+function haloText(x, y, text, anchor = 'middle') {
+  return `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="${LABEL_FONT}" font-size="10.5" font-weight="700" fill="#1f2937" stroke="#fff" stroke-width="3" stroke-linejoin="round" paint-order="stroke">${escapeXml(String(text))}</text>`;
+}
+
+/** Rough width of haloText in pixels (bold 10.5px, any system font). */
+const textWidth = (s) => Math.ceil(String(s).length * 6.4) + 6;
 
 /**
- * A small labelled badge ("pill") for a stop, gap or GPS jump.
- * Returns { svg, w, h } in CSS pixels. Drawn as SVG so exports can include it.
+ * Symbol for a stop, a gap in the recording or a GPS jump.
+ * Returns { svg, w, h, anchor: [x, y] } in CSS pixels.
+ *  - stop: small dark circle with a pause sign, with an optional short duration underneath
+ *  - gap:  two short slanted bars that break the route line; `angle` is the line's
+ *          bearing (0 = north) so the break sits across it
+ *  - jump: small red warning triangle, just above the point
  */
-export function eventBadge(kind, text) {
-  const b = BADGE[kind] || BADGE.stop;
-  const label = escapeXml(String(text));
-  const h = 24;
-  const w = Math.round(34 + label.length * 7.4); // room for bold text in any system font
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true" focusable="false">` +
-    `<rect x="1" y="1" width="${w - 2}" height="${h - 2}" rx="${(h - 2) / 2}" fill="${b.bg}" stroke="#fff" stroke-width="2"/>${b.icon}` +
-    `<text x="24" y="16.2" font-family="system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#fff">${label}</text></svg>`;
-  return { svg, w, h };
+export function eventIcon(kind, { label = '', angle = 0 } = {}) {
+  if (kind === 'gap') {
+    const s = 20, c = s / 2;
+    // Drawn for a line running left to right, then turned to the line's direction
+    const bars = `M${c - 5} ${c + 6} L${c - 1.5} ${c - 6} M${c + 1.5} ${c + 6} L${c + 5} ${c - 6}`;
+    const g = `<g transform="rotate(${(angle - 90).toFixed(1)} ${c} ${c})">` +
+      `<path d="M${c - 3.4} ${c + 4} L${c - 1} ${c - 4} L${c + 3.4} ${c - 4} L${c + 1} ${c + 4} Z" fill="#fff"/>` + // blank out the line between the bars
+      `<path d="${bars}" stroke="#fff" stroke-width="4.5" stroke-linecap="round"/>` +
+      `<path d="${bars}" stroke="#374151" stroke-width="2" stroke-linecap="round"/></g>`;
+    return { svg: `${svgOpen(s, s)}${g}</svg>`, w: s, h: s, anchor: [c, c] };
+  }
+  if (kind === 'jump') {
+    const w = 18, h = 16;
+    const svg = `${svgOpen(w, h)}<path d="M9 1.5 L17 14.5 H1 Z" fill="#b42318" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/>` +
+      `<path d="M9 5.8v4.2" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/><circle cx="9" cy="12.3" r="1.05" fill="#fff"/></svg>`;
+    return { svg, w, h, anchor: [w / 2, h + 9] };
+  }
+  // stop
+  const d = 18;
+  const w = label ? Math.max(d, textWidth(label)) : d;
+  const h = d + (label ? 13 : 0);
+  const cx = w / 2;
+  const svg = `${svgOpen(w, h)}<circle cx="${cx}" cy="9" r="8" fill="#1f2937" stroke="#fff" stroke-width="2"/>` +
+    `<rect x="${cx - 3.3}" y="5.5" width="2.3" height="7" rx=".6" fill="#fff"/><rect x="${cx + 1}" y="5.5" width="2.3" height="7" rx=".6" fill="#fff"/>` +
+    `${label ? haloText(cx, d + 10, label) : ''}</svg>`;
+  return { svg, w, h, anchor: [cx, 9] };
+}
+
+/** A short text label with a white outline and no box, e.g. "Stopped 6m" during replay. */
+export function textLabel(text) {
+  const w = textWidth(text), h = 14;
+  return { svg: `${svgOpen(w, h)}${haloText(2, 11, text, 'start')}</svg>`, w, h };
 }

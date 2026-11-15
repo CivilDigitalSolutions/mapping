@@ -82,3 +82,14 @@ test('summary line', () => {
   assert.equal(summarise({ stops: [], gaps: [], jumps: [{}] }, fmt), '1 possible GPS jump');
   assert.equal(summarise({ stops: [], gaps: [], jumps: [] }, fmt), '');
 });
+
+test('data recorded sparsely on purpose is not all gaps; a real dropout still is', () => {
+  // A survey every 30–45 minutes, moving each time: nothing unusual
+  const survey = [pt(0, 0), pt(800, 30), pt(1600, 75), pt(2400, 105), pt(3200, 140), pt(4000, 172)];
+  assert.equal(analyse(survey, all(survey)).gaps.length, 0);
+  // The same survey with one 3-hour silence: that one stands out
+  const dropout = [...survey, pt(4800, 360), pt(5600, 392)];
+  const r = analyse(dropout, all(dropout));
+  assert.equal(r.gaps.length, 1);
+  assert.equal(r.gaps[0].minutes, 188);
+});
