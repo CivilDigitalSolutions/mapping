@@ -55,9 +55,13 @@ export function createReplay({ map, getDatasets, layers, announce }) {
       .filter((ds) => ds.visible)
       .map((ds) => ({
         ds,
+        mask: layers.get(ds.id)?.mask || null, // points hidden by the filter don't replay
+      }))
+      .map(({ ds, mask }) => ({
+        ds,
         pts: ds.points
           .map((p, i) => ({ i, lat: p.lat, lon: p.lon, t: p.t }))
-          .filter((p) => p.t !== null && p.t !== undefined)
+          .filter((p) => p.t !== null && p.t !== undefined && (!mask || mask[p.i]))
           .sort((a, b) => a.t - b.t || a.i - b.i),
       }))
       .filter((tr) => tr.pts.length > 0);

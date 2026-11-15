@@ -3,8 +3,24 @@
 import { trackEvent } from './analytics.js';
 import { buildPdf, recordVideo, videoSupport } from './exporters.js';
 import { map, replay } from './mapview.js';
-import { datasets, sequenceOf } from './state.js';
+import { datasets, layers, prefs, sequenceOf } from './state.js';
+import { getScale, setScale } from './colour.js';
+import { isActive } from './filters.js';
+import { filterText } from './filter-ui.js';
+import { eventRows } from './table.js';
 import { $, $$, announce, downloadBlob, esc, safeFilename, toast } from './util.js';
+
+/**
+ * A dataset as the export should see it: only the points that pass the filter.
+ * (A copy, so the dataset itself is untouched; it keeps its colour scale for the legend.)
+ */
+function shownCopy(ds) {
+  const mask = layers.get(ds.id)?.mask;
+  if (!mask) return ds;
+  const copy = { ...ds, points: ds.points.filter((_, i) => mask[i]) };
+  setScale(copy, getScale(ds));
+  return copy;
+}
 
 export const exportDlg = $('#dlg-export');
 
@@ -82,8 +98,10 @@ export async function runExport() {
   map.closePopup();
   try {
     if (kind === 'pdf') {
+      // Stops / problems are worked out on the real datasets (same ids as the copies)
+      const events = new Map(visible.map((d) => [d.id, eventRows(d)]));
       const blob = await buildPdf({
-        map, replay, datasets: visible, sequenceOf,
+        map, replay, datasets: visible.map(shownCopy), sequenceOf,
         opts: {
           title,
           preparedFor: $('#ex-for').value.trim(),
@@ -92,6 +110,8 @@ export async function runExport() {
           view,
           tables: $('#ex-tables').checked,
           extraColumns: $('#ex-extra').checked,
+          filterText: isActive(prefs.filter) ? filterText() : '',
+          eventsOf: (d) => events.get(d.id) || [],
         },
         onProgress: exportProgress,
       });
@@ -103,7 +123,7 @@ export async function runExport() {
     } else {
       exportProgress(0, 'Getting the map ready…');
       const res = await recordVideo({
-        map, replay, datasets: visible, signal: controller.signal,
+        map, replay, datasets: visible.map(shownCopy), signal: controller.signal,
         opts: {
           title,
           seconds: Number($('#ex-length').value),

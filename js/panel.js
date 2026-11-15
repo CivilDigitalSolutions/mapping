@@ -3,14 +3,15 @@
 // opening/closing the panel on phones.
 
 import { NO_VALUE, RAMP_CSS, getScale } from './colour.js';
-import { displayTimeZone, formatDateTime, setDisplayTimeZone } from './dates.js';
+import { displayTimeZone, formatDateTime, formatDuration, setDisplayTimeZone } from './dates.js';
+import { summarise } from './analysis.js';
 import { markerSvg } from './icons.js';
 import * as store from './store.js';
 import { fitDataset, map, removeLayers, renderDataset, replay, scheduleFocusTargets } from './mapview.js';
 import { openProjectText, saveProjectFile } from './project-ui.js';
 import { openSettings } from './settings.js';
 import { datasets, layers, prefs, save, saveFailed, savePrefs, timeRange } from './state.js';
-import { exportCSV, exportGeoJSON, openTable } from './table.js';
+import { exportCSV, exportGeoJSON, openEvents, openTable } from './table.js';
 import { $, announce, closePanelOnMobile, esc, formatBytes, timeAgo, toast } from './util.js';
 
 export function renderList() {
@@ -27,8 +28,14 @@ export function renderList() {
     const li = document.createElement('li');
     li.className = 'ds-card' + (ds.visible ? '' : ' is-hidden');
     li.style.setProperty('--ds-color', ds.style.color);
-    const meta = [`${ds.points.length.toLocaleString()} point${ds.points.length === 1 ? '' : 's'}`];
-    if (tr) meta.push(tr.min === tr.max ? formatDateTime(tr.min) : `${formatDateTime(tr.min)} – ${formatDateTime(tr.max)}`);
+    // With a filter on, count and time range describe the points actually shown
+    const shown = l?.mask ? l.order.length + l.untimed.length : ds.points.length;
+    const range = l?.mask ? timeRange({ points: [...l.order, ...l.untimed].map((i) => ds.points[i]) }) : tr;
+    const meta = [l?.mask
+      ? `${shown.toLocaleString()} of ${ds.points.length.toLocaleString()} points shown`
+      : `${ds.points.length.toLocaleString()} point${ds.points.length === 1 ? '' : 's'}`];
+    if (range) meta.push(range.min === range.max ? formatDateTime(range.min) : `${formatDateTime(range.min)} – ${formatDateTime(range.max)}`);
+    const events = summarise(l?.analysis, formatDuration);
     const warn = [];
     if (ds.style.showLine && ds.style.lineOrder === 'time' && l?.untimed.length) {
       warn.push(`${l.untimed.length} point${l.untimed.length === 1 ? ' has' : 's have'} no date/time, so ${l.untimed.length === 1 ? "it isn't" : "they aren't"} on the line.`);
@@ -49,6 +56,7 @@ export function renderList() {
         </div>
       </div>
       ${scaleHtml(ds)}
+      ${events ? `<p class="ds-events">${esc(events)}. <button type="button" class="link-btn" data-act="events">List them</button></p>` : ''}
       ${warn.length ? `<p class="ds-warn">${warn.map(esc).join(' ')}</p>` : ''}
       <div class="ds-actions" role="group" aria-label="Actions for ${esc(ds.name)}">
         <button type="button" class="btn btn-sm" data-act="zoom">Zoom to</button>
@@ -81,6 +89,7 @@ export function renderList() {
       if (act === 'zoom') { if (!ds.visible) { ds.visible = true; renderDataset(ds); renderList(); save(); } fitDataset(ds); closePanelOnMobile(); }
       if (act === 'settings') openSettings(ds);
       if (act === 'table') openTable(ds);
+      if (act === 'events') openEvents(ds);
       if (act === 'export-geojson') { exportGeoJSON(ds); e.target.closest('details').open = false; }
       if (act === 'export-csv') { exportCSV(ds); e.target.closest('details').open = false; }
       if (act === 'remove') removeDataset(ds);

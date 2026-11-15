@@ -193,7 +193,7 @@ function scaledSvg(html, scale) {
  */
 export async function drawOverlays(ctx, map, cam) {
   const scale = cam.scale;
-  const lines = [], arrows = [], markers = [], heads = [], pointLayers = [];
+  const lines = [], arrows = [], markers = [], heads = [], pointLayers = [], events = [];
   map.eachLayer((l) => {
     if (l instanceof PointLayer) pointLayers.push(l);
     else if (l instanceof L.Polyline) lines.push(l);
@@ -202,6 +202,7 @@ export async function drawOverlays(ctx, map, cam) {
       if (cls.includes('dm-arrow')) arrows.push(l);
       else if (cls.includes('dm-head')) heads.push(l);
       else if (cls.includes('dm-marker')) markers.push(l);
+      else if (cls.includes('dm-event')) events.push(l); // stop / gap / jump badges
     }
   });
   const pad = 60 * scale;
@@ -278,6 +279,7 @@ export async function drawOverlays(ctx, map, cam) {
 
   markers.sort((a, b) => (a.getLatLng().lat < b.getLatLng().lat ? 1 : -1));
   for (const m of markers) await drawMarker(m, false);
+  for (const m of events) await drawMarker(m, false);
   for (const m of heads) await drawMarker(m, true);
 }
 

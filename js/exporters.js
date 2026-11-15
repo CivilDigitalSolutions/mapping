@@ -273,7 +273,7 @@ export async function buildPdf({ map, replay, datasets, sequenceOf, opts, onProg
 
   // ---- Map image sized to fill page 1 below the header
   onProgress?.(0.15, 'Drawing the map…');
-  const headerH = opts.preparedFor ? 24 : 19;
+  const headerH = (opts.preparedFor ? 24 : 19) + (opts.filterText ? 5 : 0);
   const mapW = pageW - 2 * M;
   const mapH = pageH - M - headerH - 12;
   const pxW = 1400, pxH = Math.round(pxW * (mapH / mapW));
@@ -309,6 +309,13 @@ export async function buildPdf({ map, replay, datasets, sequenceOf, opts, onProg
   if (opts.preparedFor) { doc.text(pdfText(`Prepared for: ${opts.preparedFor}`), M, y); y += 5; }
   const total = datasets.reduce((n, d) => n + d.points.length, 0);
   doc.text(pdfText(`Generated ${generated}  ·  ${datasets.length} dataset${datasets.length === 1 ? '' : 's'}, ${total.toLocaleString()} points`), M, y);
+  if (opts.filterText) {
+    // Make it obvious the report doesn't cover everything
+    y += 5;
+    doc.setTextColor(...brand);
+    doc.text(pdfText(`Filtered to: ${opts.filterText}`), M, y);
+    doc.setTextColor(...grey);
+  }
   const mapY = M + headerH;
   doc.addImage(shot.url, 'JPEG', M, mapY, mapW, mapH, undefined, 'FAST');
   doc.setDrawColor(200, 208, 216);
@@ -337,12 +344,13 @@ export async function buildPdf({ map, replay, datasets, sequenceOf, opts, onProg
       s.dur ? formatDuration(s.dur) : '-',
       d.style.showLine || s.timed ? formatDistance(s.dist) : '-',
       s.speed ? `${s.speed.toFixed(1)} km/h` : '-',
+      eventCounts(opts.eventsOf?.(d) || []),
     ];
   });
   doc.autoTable({
     startY: M + 9,
     margin: { left: M, right: M },
-    head: [['Dataset', 'Points', 'First date & time', 'Last date & time', 'Duration', 'Route distance', 'Average speed']],
+    head: [['Dataset', 'Points', 'First date & time', 'Last date & time', 'Duration', 'Route distance', 'Average speed', 'Stops and problems']],
     body: summaryRows,
     styles: { font: 'helvetica', fontSize: 9, cellPadding: 2, textColor: ink },
     headStyles: { fillColor: brand, textColor: 255, fontStyle: 'bold' },
@@ -376,6 +384,35 @@ export async function buildPdf({ map, replay, datasets, sequenceOf, opts, onProg
       doc.text(line, M, y);
       y += 5;
     }
+  }
+
+  // ---- Stops and problems, all datasets together
+  const eventRowsAll = datasets.flatMap((d) => (opts.eventsOf?.(d) || []).map((r) => [
+    pdfText(d.name), r.kind, pdfText(formatDateTime(r.from)), r.to != null ? pdfText(formatDateTime(r.to)) : '', r.dur != null ? formatDuration(r.dur) : '', pdfText(r.detail),
+  ]));
+  if (eventRowsAll.length) {
+    if (y > pageH - 40) { doc.addPage(); y = M + 5; }
+    doc.setTextColor(...ink);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text('Stops and problems', M, y + 2);
+    doc.autoTable({
+      startY: y + 5,
+      margin: { left: M, right: M, top: M },
+      head: [['Dataset', 'What', 'From', 'To', 'How long', 'Details']],
+      body: eventRowsAll,
+      styles: { font: 'helvetica', fontSize: 8.5, cellPadding: 1.6, textColor: ink, overflow: 'linebreak' },
+      headStyles: { fillColor: brand, textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [244, 247, 250] },
+      columnStyles: { 0: { cellWidth: 55 }, 1: { cellWidth: 32 } },
+      showHead: 'everyPage',
+    });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...grey);
+    y = doc.lastAutoTable.finalY + 5;
+    doc.text('A possible GPS jump is a move faster than the limit set in the app, usually a bad GPS reading. A gap is a time when nothing was recorded while moving.', M, y);
+    y += 8;
   }
 
   // ---- Point tables
@@ -438,4 +475,15 @@ export async function buildPdf({ map, replay, datasets, sequenceOf, opts, onProg
 
   onProgress?.(1, 'Done');
   return doc.output('blob');
+}
+
+/** "3 stops · 1 gap · 2 jumps" for the summary table. */
+function eventCounts(rows) {
+  const n = (kind) => rows.filter((r) => r.kind === kind).length;
+  const parts = [];
+  const s = n('Stop'), g = n('Gap in recording'), j = n('Possible GPS jump');
+  if (s) parts.push(`${s} stop${s === 1 ? '' : 's'}`);
+  if (g) parts.push(`${g} gap${g === 1 ? '' : 's'}`);
+  if (j) parts.push(`${j} jump${j === 1 ? '' : 's'}`);
+  return parts.join(', ') || '-';
 }

@@ -4,13 +4,30 @@
 
 import { PALETTE } from './icons.js';
 import * as store from './store.js';
+import { EMPTY_FILTER } from './filters.js';
+import { DEFAULT_ANALYSIS } from './analysis.js';
 
 /** @type {Array<Dataset>} */
 export const datasets = [];
 
-export const layers = new Map(); // dataset id -> { group, points: PointLayer, order, untimed }
+// dataset id -> { group, points: PointLayer, order, untimed, mask, analysis, eventMarkers }
+// `order` / `untimed` only include points that pass the filter; `mask` marks them (null = all).
+export const layers = new Map();
 
-export const prefs = { basemap: 'osm', displayTz: '', lastImportTz: '', lastBackup: 0, lastChange: 0 };
+/** Road speeds are usually given in mph in the UK and US. */
+export const DEFAULT_SPEED_UNIT = /^en-(GB|US)$/i.test(globalThis.navigator?.language || '') ? 'mph' : 'kmh';
+
+export const prefs = {
+  basemap: 'osm', displayTz: '', lastImportTz: '', lastBackup: 0, lastChange: 0,
+  filter: { ...EMPTY_FILTER },
+  analysis: { ...DEFAULT_ANALYSIS, speedUnit: DEFAULT_SPEED_UNIT, jumpSpeed: DEFAULT_SPEED_UNIT === 'mph' ? 150 : 240 },
+};
+
+/** Fill in any settings added since the preferences were saved. */
+export function completePrefs() {
+  prefs.filter = { ...EMPTY_FILTER, ...(prefs.filter || {}) };
+  prefs.analysis = { ...DEFAULT_ANALYSIS, speedUnit: DEFAULT_SPEED_UNIT, ...(prefs.analysis || {}) };
+}
 
 let saveTimer = 0;
 

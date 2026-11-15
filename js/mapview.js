@@ -6,13 +6,15 @@
 import { binColour, computeColours, getScale, setScale } from './colour.js';
 import { BASEMAPS, DEFAULT_VIEW } from './config.js';
 import { bearing, distanceMetres, formatCoord } from './coords.js';
-import { formatDateTime, formatDistance, formatDuration } from './dates.js';
-import { anchorFor, arrowSvg, markerSvg } from './icons.js';
+import { displayTimeZone, formatDateTime, formatDistance, formatDuration } from './dates.js';
+import { anchorFor, arrowSvg, eventBadge, markerSvg } from './icons.js';
 import { PointLayer, popupOffset } from './pointlayer.js';
 import { createReplay } from './replay.js';
 import * as store from './store.js';
 import { changed, datasets, hooks, layers, prefs, save, savePrefs, sequenceOf } from './state.js';
-import { $, announce, esc } from './util.js';
+import { filterMask } from './filters.js';
+import { analyse, SPEED_UNITS } from './analysis.js';
+import { $, announce, esc, toast } from './util.js';
 
 export const map = L.map('map', { zoomControl: true, keyboard: true, worldCopyJump: true }).setView(DEFAULT_VIEW.center, DEFAULT_VIEW.zoom);
 
@@ -36,6 +38,8 @@ map.createPane('arrows').style.zIndex = 420;
 
 map.createPane('dmPoints').style.zIndex = 590;      // canvas markers (replay heads at 600 sit on top)
 
+map.createPane('dmEvents').style.zIndex = 645;      // stop / gap / jump badges: above the keyboard targets so they can be clicked
+
 map.createPane('dmFocus').style.zIndex = 640;       // invisible keyboard targets over the markers
 
 map.getPane('dmPoints').style.pointerEvents = 'none';
@@ -48,7 +52,12 @@ export const colourLineRenderer = L.canvas({ padding: 0.2, pane: 'tracks' });
 export function renderDataset(ds) {
   removeLayers(ds.id);
   const group = L.featureGroup();
-  const { order, untimed } = sequenceOf(ds);
+  // The filter decides which points take part: they're the only ones drawn,
+  // joined, numbered, stepped through, replayed and analysed.
+  const mask = filterMask(ds, prefs.filter, { zone: displayTimeZone(), speedUnit: prefs.analysis.speedUnit });
+  const seq = sequenceOf(ds);
+  const order = mask ? seq.order.filter((i) => mask[i]) : seq.order;
+  const untimed = mask ? seq.untimed.filter((i) => mask[i]) : seq.untimed;
   const seqPos = new Map(order.map((pi, k) => [pi, k]));
   const st = ds.style;
   // Colour by value (speed, time or a column), if chosen
@@ -95,11 +104,119 @@ export function renderDataset(ds) {
   // All markers for the dataset are drawn on one canvas
   const labels = new Map();
   if (st.numbered) seqPos.forEach((pos, i) => labels.set(i, pos + 1));
-  const points = new PointLayer(ds, labels, { colours }).addTo(group);
+  const points = new PointLayer(ds, labels, { colours, mask }).addTo(group);
   points.on('redraw', scheduleFocusTargets);
 
-  layers.set(ds.id, { group, points, order, untimed });
+  // Stops, gaps in the recording and GPS jumps, along the shown points in time order
+  const timedOrder = (st.lineOrder === 'time' ? order : order.filter((i) => ds.points[i].t != null))
+    .slice().sort((a, b) => ds.points[a].t - ds.points[b].t || a - b);
+  const analysis = timedOrder.length > 1 ? analyse(ds.points, timedOrder, prefs.analysis) : null;
+  const eventMarkers = analysis && prefs.analysis.showOnMap ? drawEvents(ds, analysis, group) : [];
+
+  layers.set(ds.id, { group, points, order, untimed, mask, analysis, eventMarkers });
   if (ds.visible && !replay.active) group.addTo(map);
+}
+
+/** Redraw every dataset (after the filter or the stop / jump settings change). */
+export function refreshAll() {
+  map.closePopup();
+  datasets.forEach(renderDataset);
+  changed();
+}
+
+// ===================================================================== stops, gaps and jumps on the map
+
+const MAX_EVENTS = 300; // per kind, per dataset, so a very messy file can't swamp the map
+
+function eventMarker(kind, latlng, text, title, popup) {
+  const { svg, w, h } = eventBadge(kind, text);
+  const above = kind !== 'gap'; // stop and jump badges float just above the spot
+  return L.marker(latlng, {
+    pane: 'dmEvents',
+    keyboard: true,
+    title,
+    alt: title,
+    riseOnHover: true,
+    icon: L.divIcon({ className: `dm-event dm-event-${kind}`, html: svg, iconSize: [w, h], iconAnchor: [w / 2, above ? h + 12 : h / 2] }),
+  }).bindPopup(popup, { maxWidth: 300, minWidth: 220 });
+}
+
+function eventPopup(title, sub, rows, action) {
+  const el = document.createElement('div');
+  el.className = 'pop';
+  el.innerHTML = `
+    <h3 class="pop-title" tabindex="-1">${esc(title)}</h3>
+    <p class="pop-sub">${esc(sub)}</p>
+    <dl class="pop-dl">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+    ${action ? `<div class="pop-nav"><button type="button" class="btn btn-sm btn-ghost-danger" data-act="action">${esc(action.label)}</button></div>` : ''}`;
+  if (action) el.querySelector('[data-act=action]').addEventListener('click', action.onClick);
+  return el;
+}
+
+/** Add badges (and dashed lines for gaps) to the dataset's group. Returns [{ kind, item, marker }]. */
+function drawEvents(ds, { stops, gaps, jumps }, group) {
+  const out = [];
+  const unit = SPEED_UNITS[prefs.analysis.speedUnit] || SPEED_UNITS.mph;
+  const at = (i) => [ds.points[i].lat, ds.points[i].lon];
+
+  for (const s of stops.slice(0, MAX_EVENTS)) {
+    const dur = formatDuration(s.minutes * 60000);
+    const m = eventMarker('stop', [s.lat, s.lon], dur, `${ds.name}: stopped for ${dur}, ${formatDateTime(s.from)} to ${formatDateTime(s.to)}`,
+      () => eventPopup(`Stopped for ${dur}`, ds.name, [
+        ['From', formatDateTime(s.from)], ['To', formatDateTime(s.to)], ['Points recorded', String(s.count)], ['Where', formatCoord(s.lat, s.lon)],
+      ]));
+    m.addTo(group);
+    out.push({ kind: 'stop', item: s, marker: m });
+  }
+  for (const g of gaps.slice(0, MAX_EVENTS)) {
+    const dur = formatDuration(g.minutes * 60000);
+    L.polyline([at(g.a), at(g.b)], { pane: 'tracks', color: '#5b6472', weight: 3, opacity: 0.9, dashArray: '2 8', lineCap: 'round', interactive: false }).addTo(group);
+    const a = at(g.a), b = at(g.b);
+    const m = eventMarker('gap', [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], `No data ${dur}`, `${ds.name}: nothing recorded for ${dur}, ${formatDateTime(g.from)} to ${formatDateTime(g.to)}`,
+      () => eventPopup(`Nothing recorded for ${dur}`, ds.name, [
+        ['From', formatDateTime(g.from)], ['To', formatDateTime(g.to)], ['Distance between', formatDistance(g.metres)],
+        ['Note', 'The route taken during this time is not known. The dashed line just joins the two ends.'],
+      ]));
+    m.addTo(group);
+    out.push({ kind: 'gap', item: g, marker: m });
+  }
+  for (const j of jumps.slice(0, MAX_EVENTS)) {
+    const speed = `${Math.round(j.speed).toLocaleString()} ${unit.label}`;
+    const m = eventMarker('jump', at(j.i), 'Jump', `${ds.name}: possible GPS jump at ${formatDateTime(ds.points[j.i].t)}`,
+      () => eventPopup('Possible GPS jump', ds.name, [
+        ['When', formatDateTime(ds.points[j.i].t)],
+        ['From the previous point', `${formatDistance(j.metres)} in ${formatDuration(j.seconds * 1000)}`],
+        ['Speed that would need', speed],
+        ['Note', 'This is usually a bad GPS reading. You can remove the point; Undo will be offered.'],
+      ], { label: 'Remove this point', onClick: () => removePoint(ds, j.i) }));
+    m.addTo(group);
+    out.push({ kind: 'jump', item: j, marker: m });
+  }
+  return out;
+}
+
+/** Remove one point from a dataset (e.g. a bad GPS reading), with Undo. */
+export function removePoint(ds, i) {
+  const [p] = ds.points.splice(i, 1);
+  map.closePopup();
+  renderDataset(ds);
+  changed();
+  save();
+  const undo = toast(`Removed a point from "${ds.name}".`, 'info', {
+    duration: 12000,
+    action: {
+      label: 'Undo',
+      onClick: () => {
+        ds.points.splice(i, 0, p);
+        renderDataset(ds);
+        changed();
+        save();
+        announce('Point restored');
+      },
+    },
+  });
+  announce('Point removed. Press Undo to bring it back.');
+  undo.focus();
 }
 
 export function removeLayers(id) {
@@ -289,9 +406,13 @@ map.on('moveend zoomend', scheduleFocusTargets);
 // Accessible popups: move focus in when opened from the keyboard, and back out when closed.
 export let popupOpenerKey = null;
 
+let popupOpenerEl = null; // a stop / gap / jump badge that opened the popup from the keyboard
+
 map.on('popupopen', (e) => {
-  if (document.activeElement?.classList.contains('dm-focus')) {
-    popupOpenerKey = document.activeElement.dataset.pt;
+  const active = document.activeElement;
+  if (active?.classList.contains('dm-focus') || active?.classList.contains('dm-event')) {
+    popupOpenerKey = active.dataset.pt || null;
+    popupOpenerEl = active.classList.contains('dm-event') ? active : null;
     setTimeout(() => e.popup.getElement()?.querySelector('.pop-title')?.focus(), 30);
   }
   const close = e.popup.getElement()?.querySelector('.leaflet-popup-close-button');
@@ -300,26 +421,35 @@ map.on('popupopen', (e) => {
 
 map.on('popupclose', (e) => {
   const el = e.popup.getElement();
-  if (popupOpenerKey && el && el.contains(document.activeElement)) {
-    const target = map.getPane('dmFocus').querySelector(`[data-pt="${CSS.escape(popupOpenerKey)}"]`);
+  if ((popupOpenerKey || popupOpenerEl) && el && el.contains(document.activeElement)) {
+    const target = popupOpenerEl?.isConnected ? popupOpenerEl
+      : popupOpenerKey ? map.getPane('dmFocus').querySelector(`[data-pt="${CSS.escape(popupOpenerKey)}"]`) : null;
     (target || map.getContainer()).focus();
   }
   popupOpenerKey = null;
+  popupOpenerEl = null;
 });
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && document.activeElement?.closest('.leaflet-popup')) map.closePopup();
 });
 
+/** Bounds of a dataset's points that pass the filter. */
+export function shownBounds(ds, bounds = L.latLngBounds([])) {
+  const mask = layers.get(ds.id)?.mask;
+  ds.points.forEach((p, i) => { if (!mask || mask[i]) bounds.extend([p.lat, p.lon]); });
+  return bounds;
+}
+
 export function fitAll() {
   const bounds = L.latLngBounds([]);
-  datasets.forEach((d) => { if (d.visible) d.points.forEach((p) => bounds.extend([p.lat, p.lon])); });
+  datasets.forEach((d) => { if (d.visible) shownBounds(d, bounds); });
   if (bounds.isValid()) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
   else announce('There is no visible data to zoom to.');
 }
 
 export function fitDataset(ds) {
-  const b = L.latLngBounds(ds.points.map((p) => [p.lat, p.lon]));
+  const b = shownBounds(ds);
   if (b.isValid()) map.fitBounds(b, { padding: [40, 40], maxZoom: 16 });
 }
 

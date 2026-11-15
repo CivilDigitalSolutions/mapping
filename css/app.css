@@ -501,3 +501,39 @@ textarea.plain { font-family: inherit; font-size: inherit; }
 .ds-scale-swatch { width: 10px; height: 10px; border-radius: 50%; background: #9aa3ad; }
 .ds-scale-none { margin: .5rem 0 0; font-size: .8rem; color: var(--ink-2); }
 .bulk-visibility { display: flex; gap: .4rem; margin: -.25rem 0 .7rem; }
+
+/* ------------------------------------------------------------------ filter and "stops and problems" boxes */
+.tool-box { border: 1px solid var(--line); border-radius: var(--radius); margin: 0 0 .75rem; background: var(--surface); }
+.tool-box > summary {
+  list-style: none; cursor: pointer; display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem .6rem;
+  padding: .55rem .75rem; border-radius: var(--radius);
+}
+.tool-box > summary::-webkit-details-marker { display: none; }
+.tool-box > summary::before { content: "▸"; color: var(--ink-2); font-size: .8em; transition: transform .15s; }
+.tool-box[open] > summary::before { transform: rotate(90deg); }
+.tool-box > summary:hover { background: var(--surface-2); }
+.tool-title { font-weight: 700; font-size: .92rem; }
+.tool-status { font-size: .82rem; color: var(--ink-2); flex: 1 1 100%; padding-left: 1.1rem; overflow-wrap: anywhere; }
+.tool-box.is-on { border-color: var(--brand); box-shadow: inset 4px 0 0 var(--brand); }
+.tool-box.is-on .tool-status { color: var(--brand); font-weight: 600; }
+.tool-body { padding: .25rem .75rem .75rem; display: grid; gap: .55rem; }
+.tool-group { border: 0; margin: 0; padding: 0; min-width: 0; }
+.tool-group legend { font-size: .82rem; font-weight: 600; color: var(--ink-2); padding: 0; margin-bottom: .25rem; }
+.tool-row { display: flex; flex-wrap: wrap; gap: .35rem .6rem; align-items: center; font-size: .85rem; }
+.tool-row label { display: inline-flex; align-items: center; gap: .35rem; }
+.tool-row input, .tool-row select { min-height: 34px; padding: .2rem .4rem; font: inherit; font-size: .85rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.tool-row input[type="datetime-local"] { width: 100%; max-width: 13.5rem; }
+.tool-row input[type="number"] { width: 5rem; }
+.tool-row input[type="text"] { flex: 1; min-width: 6rem; }
+.tool-row select { max-width: 100%; }
+.tool-check { display: inline-flex; align-items: center; gap: .5rem; font-size: .88rem; cursor: pointer; }
+.tool-body .hint { margin: 0; font-size: .8rem; }
+.tool-body .btn { justify-self: start; }
+
+/* Stops / problems summary on a dataset card */
+.ds-events { margin: .5rem 0 0; font-size: .84rem; color: var(--ink-2); }
+
+/* Stop / gap / jump badges on the map */
+.dm-event { background: none; border: none; cursor: pointer; }
+.dm-event svg { display: block; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
+.dm-event:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 12px; }
