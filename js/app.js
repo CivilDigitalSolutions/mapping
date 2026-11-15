@@ -84,6 +84,7 @@ function save() {
       toast("Your latest changes couldn't be saved in this browser (it may be out of space). Save a project file now so you don't lose them.", 'error', { duration: 0, action: { label: 'Save project file', onClick: saveProjectFile } });
     }
     saveFailed = !ok;
+    updateStorageUsage();
     await store.set('prefs', prefs);
     updateStorageStatus();
   }, 300);
@@ -591,6 +592,31 @@ function timeAgo(ts) {
 }
 
 /** The "Keep your work safe" box under the datasets. */
+function formatBytes(n) {
+  if (!Number.isFinite(n)) return '?';
+  if (n < 1024) return `${n} bytes`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let v = n / 1024, u = 0;
+  while (v >= 1024 && u < units.length - 1) { v /= 1024; u++; }
+  return `${v >= 100 || u === 0 ? Math.round(v) : v.toFixed(1)} ${units[u]}`;
+}
+
+/** "Using 4.2 MB of 120 GB available" line in the "Keep your work safe" box. */
+async function updateStorageUsage() {
+  const el = $('#storage-usage');
+  const [u, kept] = await Promise.all([store.usage(), store.isPersisted()]);
+  if (!u || !u.quota) { el.hidden = true; return; }
+  const parts = [`<strong>Using ${formatBytes(u.usage)}</strong> of the ${formatBytes(u.quota)} this browser allows.`];
+  if (u.data !== null && u.tiles !== null) {
+    parts.push(`Your data: ${formatBytes(u.data)}. Offline copy of the app and map: ${formatBytes(u.tiles)}.`);
+  }
+  parts.push(kept
+    ? 'The browser has agreed not to clear it to free up space.'
+    : 'The browser may clear it if the device runs low on space.');
+  el.innerHTML = parts.join(' ');
+  el.hidden = false;
+}
+
 function updateStorageStatus() {
   const el = $('#storage-status');
   const box = $('#storage-box');
@@ -1114,7 +1140,7 @@ function addDataset(ds) {
   renderList();
   save();
   // Ask the browser to keep our data even when space runs low (most agree silently)
-  store.requestPersistence();
+  store.requestPersistence().then(updateStorageUsage);
 }
 
 function loadSamples() {
@@ -1346,7 +1372,8 @@ $('#display-tz').addEventListener('change', (e) => {
   }
   renderList();
   updateStorageStatus();
-  setInterval(updateStorageStatus, 60000); // keep "x minutes ago" current
+  updateStorageUsage();
+  setInterval(() => { updateStorageStatus(); updateStorageUsage(); }, 60000); // keep "x minutes ago" and usage current
   // On phones, show the "No data yet" panel straight away so people know where to start
   if (!datasets.length && matchMedia('(max-width: 760px)').matches) {
     panel.classList.add('open');
