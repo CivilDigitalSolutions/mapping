@@ -20,6 +20,8 @@ A progressive web app (PWA) for putting coordinate data on a map. Upload CSV fil
 - **Route replay:** a time slider plays the routes back. You can scrub to any moment, step from point to point, pick the speed (whole route in 15 s to 2 min, real time, or 1 min/10 min/1 hour/1 day per second), keep the whole trail or only the last 15 minutes, hour or day, and have the map follow the moving markers. Space plays and pauses, and Esc closes the replay.
 - **Video export:** saves the replay as an MP4 video (WebM in Firefox), in HD or Full HD and 15 seconds to 2 minutes long. The video shows a title, a running date/time clock, a legend and a progress bar. The camera can be **fixed** (fit all the data, or the current map view) or set to **follow the route**: it glides along with one dataset's moving marker, or with all moving datasets, at close-up, medium or wide zoom. Every setting is locked when recording starts. The video draws its own map, so moving the map on screen during a recording has no effect. Recording happens in the browser and takes as long as the video itself.
 - **PDF report:** a landscape A4 or US Letter report for clients, with a title, "prepared for" line and notes, a full-page map with a legend, a summary table (points, first/last time, duration, route distance, average speed), and optional tables of every point.
+- **Your branding on exports:** in the Export dialog, choose a logo (PNG, JPEG, SVG or WebP; it's converted to PNG and stored at most 800 × 400) and type an organisation name. They're remembered in this browser. The logo appears top-right of the PDF's first page and the name in every page footer. In videos, both appear in the top-right corner. A **scale bar** (metric and imperial) and **north arrow** are added to the PDF map and videos; this can be turned off.
+- **Replay details:** when a dataset is coloured by value, the moving route line is coloured too, in replay and in videos. While a vehicle is parked in one of its stops, a "Stopped 6m" label counts up beside it.
 - **Table view** for each dataset, as an accessible alternative to the map. **Export** each dataset as GeoJSON or CSV.
 - **Private:** data stays in the browser (IndexedDB) and survives reloads. Nothing is uploaded to a server.
 - **Project files:** *Save project file* writes every dataset, style and time zone to one `.json` file, for backups or for moving to another computer. *Open project file* adds its datasets to the map or replaces them. The panel shows when you last backed up, how much storage the app is using out of what the browser allows (split into your data and the offline copy, in Chrome and Edge), and warns if the browser can't save. The app asks the browser to keep its data permanently, and removing a dataset can be undone.
@@ -77,7 +79,7 @@ npm run test:e2e     # browser tests: the whole app in headless Chromium (about 
 npm run test:all     # both
 ```
 
-The browser tests (`tests/e2e/`) cover importing every file type, splitting files, time zones, filters, stops and GPS jumps, the map, popups and keyboard access, styles and colour by value, Undo, replay, PDF and video exports, project files and storage warnings, accessibility checks (axe-core) in light and dark mode, and speed with 25,000 points. They start their own web server and use stand-in map tiles, so they never touch the internet.
+The browser tests (`tests/e2e/`) cover importing every file type, splitting files, time zones, filters, stops and GPS jumps, branding (logo upload), the map, popups and keyboard access, styles and colour by value, Undo, replay, PDF and video exports, project files and storage warnings, accessibility checks (axe-core) in light and dark mode, and speed with 25,000 points. They start their own web server and use stand-in map tiles, so they never touch the internet.
 
 GitHub runs all of these on every push and pull request. The site is only deployed when they all pass.
 
@@ -108,6 +110,8 @@ js/colour.js          Colour by value (speed, time, columns) and colour scale
 js/filters.js         Filter logic: date range, time of day, column / speed rules
 js/filter-ui.js       The Filter and "Stops and problems" boxes in the panel
 js/analysis.js        Finding stops, gaps in the recording and GPS jumps
+js/branding-ui.js     "Your branding": logo upload and organisation name
+js/scalebar.js        Scale bar maths for exported maps
 js/capture.js         Draws the map onto a canvas for exports
 js/exporters.js       Video recording and PDF report
 js/samples.js         Built-in sample datasets

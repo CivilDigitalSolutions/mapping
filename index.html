@@ -393,7 +393,7 @@
           <li><strong>Stops and problems:</strong> stops, gaps in the recording and possible GPS jumps are marked on the map and listed on each dataset's card (<em>List them</em>). Change what counts under <em>Stops and problems</em> in the Datasets panel. To remove a bad GPS reading, open its "Jump" badge and choose <em>Remove this point</em>.</li>
           <li><strong>Follow the path:</strong> when points have dates and times, they're joined in time order with a line. Arrows show the direction of travel. You can turn this off in the dataset's settings.</li>
           <li><strong>Replay:</strong> press <em>Replay</em> to play the routes back over time. Drag the slider to any moment, use the step buttons to jump from point to point, and choose the speed and how much of the trail stays visible.</li>
-          <li><strong>Export:</strong> press <em>Export</em> to save a PDF report for a client (map, legend, summary and point tables), or a video of the replay for presentations. Videos can keep the map still or follow the route as it moves. The <em>Save video</em> button in the replay bar does the same.</li>
+          <li><strong>Export:</strong> press <em>Export</em> to save a PDF report for a client (map, legend, summary and point tables), or a video of the replay for presentations. Videos can keep the map still or follow the route as it moves. The <em>Save video</em> button in the replay bar does the same. Under <em>Your branding</em>, add your organisation's logo and name to put them on every report and video.</li>
           <li><strong>Inspect:</strong> select any marker to see its date, time, distance and time since the previous point, and its other columns.</li>
         </ol>
         <h3>Coordinate formats understood</h3>
@@ -452,6 +452,24 @@
           <label for="ex-title" class="field-label">Title</label>
           <input type="text" id="ex-title" autocomplete="off" placeholder="e.g. Site visits, March 2024">
         </div>
+
+        <fieldset class="group brand-group">
+          <legend>Your branding</legend>
+          <div class="brand-row">
+            <div class="brand-preview" id="brand-preview" aria-live="polite"><span class="muted">No logo</span></div>
+            <div class="brand-buttons">
+              <button type="button" class="btn btn-sm" id="brand-choose">Choose logo…</button>
+              <button type="button" class="btn btn-sm btn-ghost-danger" id="brand-remove" hidden>Remove logo</button>
+              <input type="file" id="brand-file" accept="image/png,image/jpeg,image/svg+xml,image/webp,.png,.jpg,.jpeg,.svg,.webp" hidden>
+            </div>
+          </div>
+          <div class="field">
+            <label for="brand-name" class="field-label">Organisation name <span class="muted">(optional)</span></label>
+            <input type="text" id="brand-name" autocomplete="organization" placeholder="e.g. Civil Digital Solutions">
+          </div>
+          <label class="tool-check"><input type="checkbox" id="brand-extras"> Add a scale bar and north arrow to the map</label>
+          <p class="hint">Shown on PDF reports and videos, and remembered in this browser for next time. PNG, JPEG, SVG or WebP; a logo with a transparent background looks best.</p>
+        </fieldset>
 
         <div data-kind="pdf">
           <div class="field">

@@ -8,6 +8,9 @@ import { getScale, setScale } from './colour.js';
 import { isActive } from './filters.js';
 import { filterText } from './filter-ui.js';
 import { eventRows } from './table.js';
+import { brandingForExport, initBrandingUi, showBranding } from './branding-ui.js';
+
+initBrandingUi();
 import { $, $$, announce, downloadBlob, esc, safeFilename, toast } from './util.js';
 
 /**
@@ -54,6 +57,7 @@ export function fillFollowTargets() {
 
 export function openExport(kind = 'pdf') {
   if (exportRun) return;
+  showBranding();
   const support = videoSupport();
   $('#video-desc').textContent = !support
     ? "This browser can't record video. Try a recent version of Chrome, Edge, Firefox or Safari."
@@ -112,6 +116,7 @@ export async function runExport() {
           extraColumns: $('#ex-extra').checked,
           filterText: isActive(prefs.filter) ? filterText() : '',
           eventsOf: (d) => events.get(d.id) || [],
+          branding: brandingForExport(),
         },
         onProgress: exportProgress,
       });
@@ -126,6 +131,7 @@ export async function runExport() {
         map, replay, datasets: visible.map(shownCopy), signal: controller.signal,
         opts: {
           title,
+          branding: brandingForExport(),
           seconds: Number($('#ex-length').value),
           size: $('#ex-size').value,
           camera: view,

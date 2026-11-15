@@ -10,6 +10,7 @@
 import { markerSvg } from './icons.js';
 import { PointLayer } from './pointlayer.js';
 import { getScale, RAMP_STOPS } from './colour.js';
+import { metresPerPixel, metricScale, imperialScale } from './scalebar.js';
 
 const CRS = L.CRS.EPSG3857;
 const TILE = 256;
@@ -441,4 +442,114 @@ export async function markerPng(style, px = 64) {
   c.width = c.height = px;
   if (img) c.getContext('2d').drawImage(img, 0, 0, px, px);
   return c.toDataURL('image/png');
+}
+
+// ------------------------------------------------------------------ scale bar, north arrow, branding
+
+/** Load an image (e.g. the uploaded logo, stored as a data: URL). Resolves to null if it can't be read. */
+export function loadImage(src) {
+  return new Promise((resolve) => {
+    if (!src) { resolve(null); return; }
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+/**
+ * Metric and imperial scale bars, bottom-right, above the map credits.
+ * `bottom` is the space to leave below it, in device pixels.
+ */
+export function drawScaleBar(ctx, cam, u, bottom = 0) {
+  const mpp = metresPerPixel(cam.center.lat, cam.zoom) / cam.scale; // metres per device pixel
+  const maxPx = 130 * u;
+  const metric = metricScale(maxPx * mpp);
+  const imperial = imperialScale(maxPx * mpp);
+  const wM = metric.metres / mpp, wI = imperial.metres / mpp;
+  const pad = 8 * u, w = Math.max(wM, wI) + pad * 2, h = 46 * u;
+  const x = ctx.canvas.width - w - 10 * u, y = ctx.canvas.height - h - bottom - 6 * u;
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,255,255,.88)';
+  roundRect(ctx, x, y, w, h, 6 * u);
+  ctx.fill();
+  ctx.strokeStyle = '#16202b';
+  ctx.fillStyle = '#16202b';
+  ctx.lineWidth = 2 * u;
+  ctx.font = `600 ${11 * u}px ${FONT}`;
+  ctx.textBaseline = 'bottom';
+  // Metric above the line, imperial below it, both starting at the left
+  const lx = x + pad, ly = y + h / 2;
+  ctx.beginPath();
+  ctx.moveTo(lx, ly - 6 * u); ctx.lineTo(lx, ly + 6 * u);
+  ctx.moveTo(lx, ly); ctx.lineTo(lx + Math.max(wM, wI), ly);
+  ctx.moveTo(lx + wM, ly - 6 * u); ctx.lineTo(lx + wM, ly);
+  ctx.moveTo(lx + wI, ly); ctx.lineTo(lx + wI, ly + 6 * u);
+  ctx.stroke();
+  ctx.fillText(metric.label, lx + 3 * u, ly - 3 * u);
+  ctx.textBaseline = 'top';
+  ctx.fillText(imperial.label, lx + 3 * u, ly + 3 * u);
+  ctx.restore();
+}
+
+/** A north arrow centred on (cx, cy). Web maps always have north at the top. */
+export function drawNorthArrow(ctx, cx, cy, u) {
+  const r = 20 * u;
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,255,255,.92)';
+  ctx.shadowColor = 'rgba(0,0,0,.25)';
+  ctx.shadowBlur = 6 * u;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.fillStyle = '#16202b';
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - r + 5 * u);
+  ctx.lineTo(cx + 7 * u, cy + 4 * u);
+  ctx.lineTo(cx, cy + 1 * u);
+  ctx.lineTo(cx - 7 * u, cy + 4 * u);
+  ctx.closePath();
+  ctx.fill();
+  ctx.font = `700 ${10 * u}px ${FONT}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('N', cx, cy + 11 * u);
+  ctx.restore();
+}
+
+/**
+ * The organisation's logo and/or name in a white box, top-right.
+ * Returns the box's height in device pixels (0 if there's nothing to show).
+ */
+export function drawBranding(ctx, logo, name, u) {
+  if (!logo && !name) return 0;
+  const pad = 10 * u, maxH = 44 * u, maxW = 200 * u;
+  let lw = 0, lh = 0;
+  if (logo) {
+    const s = Math.min(maxH / logo.naturalHeight, maxW / logo.naturalWidth);
+    lw = logo.naturalWidth * s; lh = logo.naturalHeight * s;
+  }
+  ctx.save();
+  ctx.font = `700 ${15 * u}px ${FONT}`;
+  const text = name ? truncate(ctx, name, 320 * u) : '';
+  const tw = text ? ctx.measureText(text).width : 0;
+  const gap = logo && text ? 10 * u : 0;
+  const w = pad * 2 + lw + gap + tw;
+  const h = pad * 2 + Math.max(lh, text ? 20 * u : 0);
+  const x = ctx.canvas.width - w - 16 * u, y = 16 * u;
+  ctx.fillStyle = 'rgba(255,255,255,.95)';
+  ctx.shadowColor = 'rgba(0,0,0,.25)';
+  ctx.shadowBlur = 8 * u;
+  roundRect(ctx, x, y, w, h, 10 * u);
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  if (logo) ctx.drawImage(logo, x + pad, y + (h - lh) / 2, lw, lh);
+  if (text) {
+    ctx.fillStyle = '#16202b';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + pad + lw + gap, y + h / 2);
+  }
+  ctx.restore();
+  return h;
 }
