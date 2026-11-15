@@ -74,12 +74,13 @@ function toast(msg, kind = 'info', { action = null, duration = 5000 } = {}) {
   return btn;
 }
 
-let saveTimer;
+let saveTimer = 0;
 let saveFailed = false;
 function save() {
   clearTimeout(saveTimer);
   prefs.lastChange = Date.now();
   saveTimer = setTimeout(async () => {
+    saveTimer = 0;
     const ok = await store.set('datasets', datasets);
     if (!ok && !saveFailed) {
       toast("Your latest changes couldn't be saved in this browser (it may be out of space). Save a project file now so you don't lose them.", 'error', { duration: 0, action: { label: 'Save project file', onClick: saveProjectFile } });
@@ -91,6 +92,18 @@ function save() {
   }, 300);
 }
 function savePrefs() { store.set('prefs', prefs); }
+
+// Saving waits a moment so quick changes are written together. If the page is
+// closed, reloaded or hidden during that moment, write straight away instead.
+function flushSave() {
+  if (!saveTimer) return;
+  clearTimeout(saveTimer);
+  saveTimer = 0;
+  store.set('datasets', datasets);
+  store.set('prefs', prefs);
+}
+window.addEventListener('pagehide', flushSave);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushSave(); });
 
 const replay = createReplay({ map, getDatasets: () => datasets, layers, announce });
 
