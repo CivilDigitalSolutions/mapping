@@ -19,6 +19,7 @@ VAN-01,51.50812,-0.07600,2024-03-14T09:04:00Z,0`,
   },
   {
     name: 'Sample: Survey crew (separate date and time)',
+    timeZone: 'Europe/London', // the times in this file are UK local time
     style: { shape: 'square', color: '#D55E00', showLine: true, lineOrder: 'time', lineStyle: 'dashed' },
     text: `Point,Location,Date,Time,Notes
 S1,"51.4995, -0.1248",14/03/2024,09:10,Start of survey

@@ -15,7 +15,7 @@ const SLIDER_STEPS = 1000;
  * @param {object} ctx
  * @param {L.Map} ctx.map
  * @param {() => Array} ctx.getDatasets
- * @param {Map} ctx.layers  dataset id -> { group, markers }
+ * @param {Map} ctx.layers  dataset id -> { group, points }
  * @param {(msg: string) => void} ctx.announce
  */
 export function createReplay({ map, getDatasets, layers, announce }) {
@@ -32,13 +32,16 @@ export function createReplay({ map, getDatasets, layers, announce }) {
   const startOut = document.getElementById('rp-start');
   const endOut = document.getElementById('rp-end');
 
+  // Replay lines are redrawn every frame, so draw them on canvas (much faster than SVG for long routes)
+  const lineRenderer = L.canvas({ padding: 0.2, pane: 'tracks' });
+
   const state = {
     active: false,
     playing: false,
     t: 0,
     min: 0,
     max: 0,
-    tracks: [],      // [{ ds, pts: [{i, lat, lon, t}], shown: Set, line, casing, head, group }]
+    tracks: [],      // [{ ds, pts: [{i, lat, lon, t}], points: PointLayer, line, casing, head, group }]
     events: [],      // sorted unique times across all tracks, for step buttons
     raf: 0,
     lastFrame: 0,
@@ -67,7 +70,10 @@ export function createReplay({ map, getDatasets, layers, announce }) {
   function clearTracks() {
     for (const tr of state.tracks) {
       map.removeLayer(tr.group);
-      for (const m of tr.shown.values()) map.removeLayer(m);
+      if (tr.points) {
+        map.removeLayer(tr.points);
+        tr.points.setTimeWindow(null, null);
+      }
     }
     state.tracks = [];
   }
@@ -89,8 +95,8 @@ export function createReplay({ map, getDatasets, layers, announce }) {
       const st = tr.ds.style;
       const group = L.layerGroup().addTo(map);
       const dash = st.lineStyle === 'dashed' ? '10 8' : st.lineStyle === 'dotted' ? '2 7' : null;
-      const casing = L.polyline([], { pane: 'tracks', color: '#fff', weight: 7, opacity: 0.8, interactive: false, lineCap: 'round', lineJoin: 'round' }).addTo(group);
-      const line = L.polyline([], { pane: 'tracks', color: st.color, weight: 4, opacity: 1, dashArray: dash, interactive: false, lineCap: 'round', lineJoin: 'round' }).addTo(group);
+      const casing = L.polyline([], { renderer: lineRenderer, color: '#fff', weight: 7, opacity: 0.8, interactive: false, lineCap: 'round', lineJoin: 'round' }).addTo(group);
+      const line = L.polyline([], { renderer: lineRenderer, color: st.color, weight: 4, opacity: 1, dashArray: dash, interactive: false, lineCap: 'round', lineJoin: 'round' }).addTo(group);
       const size = Math.round(st.size * 1.35);
       const head = L.marker([tr.pts[0].lat, tr.pts[0].lon], {
         icon: L.divIcon({
@@ -103,7 +109,11 @@ export function createReplay({ map, getDatasets, layers, announce }) {
         interactive: false,
         zIndexOffset: 1000,
       }).addTo(group);
-      return { ...tr, group, line, casing, head, shown: new Map() };
+      // The dataset's own marker layer, limited to the points reached so far
+      const points = layers.get(tr.ds.id)?.points || null;
+      if (points) map.addLayer(points);
+      const lls = tr.pts.map((q) => L.latLng(q.lat, q.lon)); // made once, reused every frame
+      return { ...tr, group, line, casing, head, points, lls };
     });
 
     const times = tracks.flatMap((t) => t.pts.map((p) => p.t));
@@ -132,14 +142,9 @@ export function createReplay({ map, getDatasets, layers, announce }) {
 
     for (const tr of state.tracks) {
       const { pts } = tr;
-      const l = layers.get(tr.ds.id);
       // Index of the last point at or before t
       let k = upperBound(pts, t) - 1;
-      const path = [];
-      const want = new Set();
-      for (let j = 0; j <= k; j++) {
-        if (pts[j].t >= from) { path.push([pts[j].lat, pts[j].lon]); want.add(pts[j].i); }
-      }
+      const path = tr.lls.slice(lowerBound(pts, from), k + 1);
 
       // Interpolated head position
       let head = null;
@@ -167,14 +172,8 @@ export function createReplay({ map, getDatasets, layers, announce }) {
         tr.group.removeLayer(tr.head); // not started yet
       }
 
-      // Show reached point markers (these keep their normal popups)
-      if (l) {
-        for (const [i, m] of tr.shown) if (!want.has(i)) { map.removeLayer(m); tr.shown.delete(i); }
-        for (const i of want) {
-          const m = l.markers.get(i);
-          if (m && !tr.shown.has(i)) { map.addLayer(m); tr.shown.set(i, m); }
-        }
-      }
+      // Show the points reached so far (they keep their normal popups)
+      tr.points?.setTimeWindow(from, t);
     }
 
     // Slider + readout
@@ -197,6 +196,12 @@ export function createReplay({ map, getDatasets, layers, announce }) {
         }
       }
     }
+  }
+
+  function lowerBound(pts, t) {
+    let lo = 0, hi = pts.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (pts[mid].t < t) lo = mid + 1; else hi = mid; }
+    return lo;
   }
 
   function upperBound(pts, t) {

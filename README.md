@@ -18,6 +18,9 @@ A progressive web app (PWA) for putting coordinate data on a map. Upload CSV fil
 - **PDF report:** a landscape A4 or US Letter report for clients, with a title, "prepared for" line and notes, a full-page map with a legend, a summary table (points, first/last time, duration, route distance, average speed), and optional tables of every point.
 - **Table view** for each dataset, as an accessible alternative to the map. **Export** each dataset as GeoJSON or CSV.
 - **Private:** data stays in the browser (IndexedDB) and survives reloads. Nothing is uploaded to a server.
+- **Project files:** *Save project file* writes every dataset, style and time zone to one `.json` file, for backups or for moving to another computer. *Open project file* adds its datasets to the map or replaces them. The panel shows when you last backed up and warns if the browser can't save. The app asks the browser to keep its data permanently, and removing a dataset can be undone.
+- **Time zones:** times that state their zone (`Z`, `+01:00`, Unix timestamps) are used exactly. For other times you choose the zone when importing, and it can be corrected later per dataset (daylight saving is handled). *Show times in* displays everything in your device's zone, UTC or any other zone, and every displayed time carries its zone label, including in PDFs and videos.
+- **Large datasets:** markers are drawn on a canvas, so tens of thousands of points stay smooth. With 25,000 points, adding them takes about 0.25 s and the replay runs at about 40 frames per second. When 150 or fewer markers are in view, each one also gets an invisible focusable button, so keyboard and screen-reader users can Tab between them.
 - **Works offline** once installed. Map tiles you've already viewed are cached.
 - **Accessible:** keyboard operable (Tab between markers, Enter opens one), screen-reader labels and announcements, visible focus, shapes as well as colours to tell datasets apart, dark mode, reduced-motion support and a mobile layout.
 
@@ -79,6 +82,8 @@ js/coords.js          Coordinate parsing (decimal, DMS, combined, WKT)
 js/dates.js           Date/time parsing and formatting
 js/icons.js           SVG marker shapes and palette
 js/replay.js          Route replay / time slider
+js/pointlayer.js      Canvas marker layer (fast drawing, hit-testing, keyboard targets)
+js/project.js         Project file save / open
 js/capture.js         Draws the map onto a canvas for exports
 js/exporters.js       Video recording and PDF report
 js/samples.js         Built-in sample datasets
