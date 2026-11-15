@@ -2,7 +2,7 @@
 // setting, and correcting a dataset's zone afterwards.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startServer, launch, openApp, loadSamples, pasteData, finishImport, cardMeta } from './helpers.mjs';
+import { startServer, launch, openApp, loadSamples, pasteData, finishImport, cardMeta, waitForText } from './helpers.mjs';
 
 let server, browser;
 before(async () => { server = await startServer(); browser = await launch(); });
@@ -36,6 +36,8 @@ test("a dataset's time zone can be corrected after importing", async () => {
   assert.match(await cardMeta(page, 0), /09:00:00 UTC/);
   await page.locator('[data-act=settings]').click();
   await page.selectOption('#set-tz', 'Europe/London');
+  // 09:00 British Summer Time is 08:00 UTC; the card updates while the dialog is still open
+  await waitForText(page.locator('.ds-meta').first(), /08:00:00 UTC/);
   await page.click('#settings-form button[type=submit]');
-  assert.match(await cardMeta(page, 0), /08:00:00 UTC/, '09:00 British Summer Time is 08:00 UTC');
+  await waitForText(page.locator('.ds-meta').first(), /08:00:00 UTC/);
 });
