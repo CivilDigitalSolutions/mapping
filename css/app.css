@@ -491,3 +491,13 @@ textarea.plain { font-family: inherit; font-size: inherit; }
 
 .storage-usage { margin: -.25rem 0 .6rem; font-size: .82rem; color: var(--ink-2); }
 .storage-usage strong { color: var(--ink); }
+
+/* ------------------------------------------------------------------ colour by value */
+.ds-scale { display: grid; grid-template-columns: 1fr; gap: .15rem; margin-top: .55rem; font-size: .8rem; }
+.ds-scale-title { font-weight: 600; color: var(--ink-2); }
+.ds-scale-bar { display: block; height: 10px; border-radius: 5px; border: 1px solid var(--line); }
+.ds-scale-ends { display: flex; justify-content: space-between; gap: .5rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.ds-scale-missing { display: inline-flex; align-items: center; gap: .35rem; color: var(--ink-2); }
+.ds-scale-swatch { width: 10px; height: 10px; border-radius: 50%; background: #9aa3ad; }
+.ds-scale-none { margin: .5rem 0 0; font-size: .8rem; color: var(--ink-2); }
+.bulk-visibility { display: flex; gap: .4rem; margin: -.25rem 0 .7rem; }

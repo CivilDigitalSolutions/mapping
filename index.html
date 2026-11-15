@@ -54,6 +54,10 @@
         <h2 id="panel-title">Datasets</h2>
         <span class="muted" id="panel-summary"></span>
       </div>
+      <div class="bulk-visibility" id="bulk-visibility" hidden>
+        <button type="button" class="btn btn-sm" id="btn-show-all">Show all</button>
+        <button type="button" class="btn btn-sm" id="btn-hide-all">Hide all</button>
+      </div>
       <div class="tz-setting">
         <label for="display-tz">Show times in</label>
         <select id="display-tz"></select>
@@ -223,6 +227,12 @@
           </div>
         </fieldset>
 
+        <div class="field" id="imp-split-field" hidden>
+          <label for="imp-split" class="field-label">Split into separate datasets by <span class="muted">(optional)</span></label>
+          <select id="imp-split"></select>
+          <p class="hint" id="imp-split-hint"></p>
+        </div>
+
         <div class="field" id="imp-tz-field">
           <label for="imp-tz" class="field-label">Time zone of these dates and times</label>
           <select id="imp-tz"></select>
@@ -308,6 +318,8 @@
           <li><strong>Add data:</strong> upload one or more files, or paste rows copied from a spreadsheet. Each file or paste becomes its own dataset.</li>
           <li><strong>Check the columns:</strong> the app guesses which columns are latitude, longitude, date and time. Change any guess that looks wrong. The preview shows what will be mapped.</li>
           <li><strong>Pick a marker:</strong> give each dataset its own shape (circle, square, triangle, waypoint pin, flag and others) and colour so you can tell them apart.</li>
+          <li><strong>One file, many vehicles:</strong> if a file has a column such as Vehicle or Device, choose it under <em>Split into separate datasets by</em>. Each one becomes its own dataset with its own colour.</li>
+          <li><strong>Colour by value:</strong> in a dataset's <em>Style</em>, choose <em>Colour markers and line by</em> speed, time or any number column. Low values are dark purple and high values are yellow. The scale shows on the dataset's card and in exports.</li>
           <li><strong>Follow the path:</strong> when points have dates and times, they're joined in time order with a line. Arrows show the direction of travel. You can turn this off in the dataset's settings.</li>
           <li><strong>Replay:</strong> press <em>Replay</em> to play the routes back over time. Drag the slider to any moment, use the step buttons to jump from point to point, and choose the speed and how much of the trail stays visible.</li>
           <li><strong>Export:</strong> press <em>Export</em> to save a PDF report for a client (map, legend, summary and point tables), or a video of the replay for presentations. Videos can keep the map still or follow the route as it moves. The <em>Save video</em> button in the replay bar does the same.</li>

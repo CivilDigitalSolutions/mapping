@@ -9,6 +9,7 @@
 
 import { markerSvg } from './icons.js';
 import { PointLayer } from './pointlayer.js';
+import { getScale, RAMP_STOPS } from './colour.js';
 
 const CRS = L.CRS.EPSG3857;
 const TILE = 256;
@@ -315,15 +316,23 @@ export function drawAttribution(ctx, map, u, bottomOffset = 0) {
   ctx.restore();
 }
 
-/** Legend box listing each dataset with its marker. Returns its height. */
-export async function drawLegend(ctx, datasets, u, { x = 16, bottom = 36 } = {}) {
+/**
+ * Legend box listing each dataset with its marker, plus a colour bar for any
+ * dataset coloured by value. Long lists are cut short with "and N more".
+ * Returns its height.
+ */
+export async function drawLegend(ctx, datasets, u, { x = 16, bottom = 36, maxRows = 12 } = {}) {
   if (!datasets.length) return 0;
-  const rowH = 26 * u, pad = 10 * u, icon = 18;
+  const rowH = 26 * u, scaleH = 44 * u, pad = 10 * u, icon = 18;
+  const shown = datasets.length > maxRows ? datasets.slice(0, maxRows - 1) : datasets;
+  const more = datasets.length - shown.length;
   ctx.save();
   ctx.font = `600 ${13 * u}px ${FONT}`;
-  const names = datasets.map((d) => truncate(ctx, d.name, 320 * u));
-  const w = Math.max(...names.map((n) => ctx.measureText(n).width)) + pad * 2 + 28 * u;
-  const h = rowH * datasets.length + pad * 1.2;
+  const names = shown.map((d) => truncate(ctx, d.name, 320 * u));
+  const scales = shown.map((d) => { const sc = getScale(d); return sc && Number.isFinite(sc.min) ? sc : null; });
+  const barW = 220 * u;
+  const w = Math.max(...names.map((n) => ctx.measureText(n).width), scales.some(Boolean) ? barW : 0) + pad * 2 + 28 * u;
+  const h = shown.reduce((sum, _, i) => sum + rowH + (scales[i] ? scaleH : 0), 0) + (more ? rowH : 0) + pad * 1.2;
   const left = x * u, top = ctx.canvas.height - bottom * u - h;
   ctx.fillStyle = 'rgba(255,255,255,.93)';
   ctx.shadowColor = 'rgba(0,0,0,.25)';
@@ -331,14 +340,45 @@ export async function drawLegend(ctx, datasets, u, { x = 16, bottom = 36 } = {})
   roundRect(ctx, left, top, w, h, 8 * u);
   ctx.fill();
   ctx.shadowColor = 'transparent';
-  for (let i = 0; i < datasets.length; i++) {
-    const d = datasets[i];
-    const cy = top + pad * 0.6 + rowH * i + rowH / 2;
+  let y = top + pad * 0.6;
+  for (let i = 0; i < shown.length; i++) {
+    const d = shown[i];
+    const cy = y + rowH / 2;
     const img = await svgImage(markerSvg({ shape: d.style.shape, color: d.style.color, size: icon * u }));
     if (img) ctx.drawImage(img, left + pad, cy - (icon * u) / 2, icon * u, icon * u);
+    ctx.font = `600 ${13 * u}px ${FONT}`;
     ctx.fillStyle = '#16202b';
     ctx.textBaseline = 'middle';
     ctx.fillText(names[i], left + pad + 26 * u, cy);
+    y += rowH;
+    const sc = scales[i];
+    if (sc) {
+      // Scale title, colour bar, then the low and high values at each end
+      const bx = left + pad + 26 * u, bh = 8 * u;
+      ctx.font = `${11 * u}px ${FONT}`;
+      ctx.fillStyle = '#4a5867';
+      ctx.textBaseline = 'top';
+      ctx.fillText(truncate(ctx, sc.title, barW), bx, y - 3 * u);
+      const by = y + 12 * u;
+      const grad = ctx.createLinearGradient(bx, 0, bx + barW, 0);
+      RAMP_STOPS.forEach((c, k) => grad.addColorStop(k / (RAMP_STOPS.length - 1), c));
+      ctx.fillStyle = grad;
+      roundRect(ctx, bx, by, barW, bh, 4 * u);
+      ctx.fill();
+      ctx.fillStyle = '#4a5867';
+      const lo = `${sc.clipped ? '≤ ' : ''}${sc.format(sc.min)}`, hi = `${sc.clipped ? '≥ ' : ''}${sc.format(sc.max)}`;
+      ctx.fillText(truncate(ctx, lo, barW * 0.48), bx, by + bh + 3 * u);
+      ctx.textAlign = 'right';
+      ctx.fillText(truncate(ctx, hi, barW * 0.48), bx + barW, by + bh + 3 * u);
+      ctx.textAlign = 'left';
+      y += scaleH;
+    }
+  }
+  if (more) {
+    ctx.font = `600 ${13 * u}px ${FONT}`;
+    ctx.fillStyle = '#4a5867';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`and ${more} more dataset${more === 1 ? '' : 's'}`, left + pad + 26 * u, y + rowH / 2);
   }
   ctx.restore();
   return h;

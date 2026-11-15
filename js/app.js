@@ -11,6 +11,7 @@ import { createReplay } from './replay.js';
 import { recordVideo, buildPdf, videoSupport } from './exporters.js';
 import { initAnalytics, trackEvent } from './analytics.js';
 import { PointLayer, popupOffset } from './pointlayer.js';
+import { computeColours, colourByOptions, setScale, getScale, binColour, RAMP_CSS, NO_VALUE } from './colour.js';
 
 // ===================================================================== state
 
@@ -135,8 +136,16 @@ function defaultStyle(n, hasTimes) {
     lineStyle: 'solid',
     showArrows: true,
     numbered: false,
+    colourBy: 'none',
+    // Road speeds are usually given in mph in the UK and US
+    speedUnit: /^en-(GB|US)$/i.test(navigator.language || '') ? 'mph' : 'kmh',
   };
 }
+
+const SHAPE_ORDER = ['circle', 'square', 'pin', 'triangle', 'diamond', 'star', 'hexagon', 'flag', 'cross'];
+
+// Lines coloured by value are drawn on canvas: there can be thousands of short runs
+const colourLineRenderer = L.canvas({ padding: 0.2, pane: 'tracks' });
 
 /** Indexes of points in drawing / stepping order, plus those left out. */
 function sequenceOf(ds) {
@@ -164,13 +173,32 @@ function renderDataset(ds) {
   const { order, untimed } = sequenceOf(ds);
   const seqPos = new Map(order.map((pi, k) => [pi, k]));
   const st = ds.style;
+  // Colour by value (speed, time or a column), if chosen
+  const colours = computeColours(ds);
+  setScale(ds, colours);
+  // A leg is coloured by the point it arrives at (for speed, that's the leg's own speed)
+  const legColour = (k) => (colours ? binColour(colours.bins[order[k + 1]]) : st.color);
 
   // Line first so it draws under the markers
   if (st.showLine && order.length > 1) {
     const latlngs = order.map((i) => [ds.points[i].lat, ds.points[i].lon]);
     const dash = st.lineStyle === 'dashed' ? '10 8' : st.lineStyle === 'dotted' ? '2 7' : null;
-    L.polyline(latlngs, { pane: 'tracks', color: '#fff', weight: 6, opacity: 0.75, interactive: false, lineCap: 'round', lineJoin: 'round' }).addTo(group);
-    L.polyline(latlngs, { pane: 'tracks', color: st.color, weight: 3, opacity: 0.95, dashArray: dash, interactive: false, lineCap: 'round', lineJoin: 'round' }).addTo(group);
+    const lineOpts = { interactive: false, lineCap: 'round', lineJoin: 'round' };
+    if (!colours) {
+      L.polyline(latlngs, { ...lineOpts, pane: 'tracks', color: '#fff', weight: 6, opacity: 0.75 }).addTo(group);
+      L.polyline(latlngs, { ...lineOpts, pane: 'tracks', color: st.color, weight: 3, opacity: 0.95, dashArray: dash }).addTo(group);
+    } else {
+      // White casing, then one line per run of legs that share a colour
+      L.polyline(latlngs, { ...lineOpts, renderer: colourLineRenderer, color: '#fff', weight: 6, opacity: 0.75 }).addTo(group);
+      let run = [latlngs[0]], runColour = legColour(0);
+      const flush = () => L.polyline(run, { ...lineOpts, renderer: colourLineRenderer, color: runColour, weight: 3.5, opacity: 1, dashArray: dash }).addTo(group);
+      for (let k = 0; k < latlngs.length - 1; k++) {
+        const c = legColour(k);
+        if (c !== runColour) { flush(); run = [latlngs[k]]; runColour = c; }
+        run.push(latlngs[k + 1]);
+      }
+      flush();
+    }
 
     if (st.showArrows) {
       const step = Math.max(1, Math.ceil((latlngs.length - 1) / 400));
@@ -180,7 +208,7 @@ function renderDataset(ds) {
         const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
         L.marker(mid, {
           pane: 'arrows', interactive: false, keyboard: false,
-          icon: L.divIcon({ className: 'dm-arrow', html: arrowSvg(st.color, bearing(a, b)), iconSize: [16, 16], iconAnchor: [8, 8] }),
+          icon: L.divIcon({ className: 'dm-arrow', html: arrowSvg(legColour(k), bearing(a, b)), iconSize: [16, 16], iconAnchor: [8, 8] }),
         }).addTo(group);
       }
     }
@@ -189,7 +217,7 @@ function renderDataset(ds) {
   // All markers for the dataset are drawn on one canvas
   const labels = new Map();
   if (st.numbered) seqPos.forEach((pos, i) => labels.set(i, pos + 1));
-  const points = new PointLayer(ds, labels).addTo(group);
+  const points = new PointLayer(ds, labels, { colours }).addTo(group);
   points.on('redraw', scheduleFocusTargets);
 
   layers.set(ds.id, { group, points, order, untimed });
@@ -219,6 +247,10 @@ function popupContent(ds, i) {
     const dist = formatDistance(distanceMetres([q.lat, q.lon], [p.lat, p.lon]));
     const dt = p.t != null && q.t != null ? formatDuration(p.t - q.t) : null;
     rows.push(['From previous', dt ? `${dist} · ${dt}` : dist]);
+  }
+  const scale = getScale(ds);
+  if (scale && ds.style.colourBy === 'speed') {
+    rows.push(['Speed', Number.isFinite(scale.values[i]) ? esc(scale.format(scale.values[i])) : '<span class="muted">Not known</span>']);
   }
   for (const [k, v] of Object.entries(p.props || {})) {
     rows.push([esc(k), linkify(esc(v))]);
@@ -411,6 +443,7 @@ function renderList() {
   $('#empty-state').hidden = datasets.length > 0;
   const total = datasets.reduce((n, d) => n + d.points.length, 0);
   $('#panel-summary').textContent = datasets.length ? `${datasets.length} · ${total.toLocaleString()} points` : '';
+  $('#bulk-visibility').hidden = datasets.length < 2;
 
   datasets.forEach((ds) => {
     const l = layers.get(ds.id);
@@ -439,6 +472,7 @@ function renderList() {
           <span class="ds-meta">${esc(meta.join(' · '))}</span>
         </div>
       </div>
+      ${scaleHtml(ds)}
       ${warn.length ? `<p class="ds-warn">${warn.map(esc).join(' ')}</p>` : ''}
       <div class="ds-actions" role="group" aria-label="Actions for ${esc(ds.name)}">
         <button type="button" class="btn btn-sm" data-act="zoom">Zoom to</button>
@@ -480,6 +514,20 @@ function renderList() {
   $('#btn-export').disabled = !datasets.length;
   updateStorageStatus();
   replay.refresh();
+}
+
+/** The colour scale shown on a dataset's card when it's coloured by value. */
+function scaleHtml(ds) {
+  const s = getScale(ds);
+  if (!s) return '';
+  if (!Number.isFinite(s.min)) return `<p class="ds-scale-none">Coloured by ${esc(s.title)}, but no values were found.</p>`;
+  const missing = s.bins.some((b) => b === NO_VALUE);
+  return `<div class="ds-scale">
+      <span class="ds-scale-title">${esc(s.title)}</span>
+      <span class="ds-scale-bar" style="background:${RAMP_CSS}" aria-hidden="true"></span>
+      <span class="ds-scale-ends"><span>${s.clipped ? '≤ ' : ''}${esc(s.format(s.min))}</span><span>${s.clipped ? '≥ ' : ''}${esc(s.format(s.max))}</span></span>
+      ${missing ? '<span class="ds-scale-missing"><span class="ds-scale-swatch" aria-hidden="true"></span>Grey: no value</span>' : ''}
+    </div>`;
 }
 
 function removeDataset(ds) {
@@ -641,6 +689,19 @@ function updateStorageStatus() {
 }
 
 $('#btn-save-project').addEventListener('click', saveProjectFile);
+
+function setAllVisible(visible) {
+  for (const ds of datasets) {
+    ds.visible = visible;
+    const g = layers.get(ds.id)?.group;
+    if (!replay.active && g) visible ? g.addTo(map) : map.removeLayer(g);
+  }
+  renderList();
+  save();
+  announce(visible ? 'All datasets shown' : 'All datasets hidden');
+}
+$('#btn-show-all').addEventListener('click', () => setAllVisible(true));
+$('#btn-hide-all').addEventListener('click', () => setAllVisible(false));
 $('#btn-open-project').addEventListener('click', () => { $('#project-input').value = ''; $('#project-input').click(); });
 $('#project-input').addEventListener('change', async (e) => {
   const f = e.target.files[0];
@@ -653,7 +714,9 @@ $('#project-input').addEventListener('change', async (e) => {
  * Render marker / line style controls into a container.
  * onChange(style) is called whenever something changes.
  */
-function renderStyleControls(container, style, onChange, prefix) {
+function renderStyleControls(container, style, onChange, prefix, points = []) {
+  const byOptions = colourByOptions(points);
+  if (!byOptions.some((o) => o.value === style.colourBy)) style.colourBy = 'none';
   const shapeRadios = SHAPE_KEYS.map((k) => `
     <label class="shape-opt" title="${SHAPES[k].label}">
       <input type="radio" name="${prefix}-shape" value="${k}" ${style.shape === k ? 'checked' : ''}>
@@ -678,6 +741,23 @@ function renderStyleControls(container, style, onChange, prefix) {
         <label class="color-custom"><span>Custom</span><input type="color" value="${style.color}" data-k="customColor"></label>
       </div>
     </div>
+    <div class="grid-2">
+      <div class="field">
+        <label class="field-label" for="${prefix}-colourby">Colour markers and line by</label>
+        <select id="${prefix}-colourby" data-k="colourBy">
+          ${byOptions.map((o) => `<option value="${esc(o.value)}" ${style.colourBy === o.value ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field" data-speed-unit>
+        <label class="field-label" for="${prefix}-speedunit">Speed in</label>
+        <select id="${prefix}-speedunit" data-k="speedUnit">
+          <option value="mph" ${style.speedUnit === 'mph' ? 'selected' : ''}>Miles per hour (mph)</option>
+          <option value="kmh" ${style.speedUnit === 'kmh' ? 'selected' : ''}>Kilometres per hour (km/h)</option>
+          <option value="ms" ${style.speedUnit === 'ms' ? 'selected' : ''}>Metres per second (m/s)</option>
+        </select>
+      </div>
+    </div>
+    <p class="hint" data-colourby-hint>Low values are dark purple, high values are yellow. The colour chosen above is still used for the dataset's legend icon and its line during replay.</p>
     <div class="grid-2">
       <div class="field">
         <label class="field-label" for="${prefix}-size">Marker size <span class="muted" data-out="size">${style.size}px</span></label>
@@ -719,6 +799,8 @@ function renderStyleControls(container, style, onChange, prefix) {
     $$('.shape-swatch', container).forEach((sw, i) => { sw.innerHTML = markerSvg({ shape: SHAPE_KEYS[i], color: style.color, size: 26 }); });
     $('[data-out="size"]', container).textContent = `${style.size}px`;
     $('[data-line-opts]', container).classList.toggle('is-dim', !style.showLine && !style.numbered);
+    $('[data-speed-unit]', container).hidden = style.colourBy !== 'speed';
+    $('[data-colourby-hint]', container).hidden = style.colourBy === 'none';
   };
   container.oninput = container.onchange = (e) => {
     const t = e.target;
@@ -764,7 +846,7 @@ function openSettings(ds) {
   renderStyleControls($('#set-style'), ds.style, () => {
     cancelAnimationFrame(pending);
     pending = requestAnimationFrame(() => { renderDataset(ds); replay.refresh(); });
-  }, 'set');
+  }, 'set', ds.points);
   dlg.onclose = () => { renderDataset(ds); renderList(); save(); };
   dlg.showModal();
 }
@@ -934,7 +1016,8 @@ function configureItem(item) {
 
   const hasTimes = pending.result.points.filter((p) => p.t != null).length >= 2;
   pending.style = defaultStyle(n, hasTimes);
-  renderStyleControls($('#imp-style'), pending.style, () => {}, 'imp');
+  renderStyleControls($('#imp-style'), pending.style, () => {}, 'imp', pending.result.points);
+  fillSplitSelect();
   $('#imp-name').focus();
   $('#imp-name').select();
 }
@@ -999,6 +1082,11 @@ function recompute() {
     pending.result = pending.parseGeo(importZone());
   }
   updateZoneHint();
+  if (pending.style) {
+    // Columns available for colouring can change with the column choices
+    renderStyleControls($('#imp-style'), pending.style, () => {}, 'imp', pending.result.points);
+    fillSplitSelect();
+  }
   const { points, skipped } = pending.result;
   const timed = points.filter((p) => p.t != null).length;
   const total = pending.format === 'table' ? pending.table.rows.length : points.length + skipped.length;
@@ -1051,6 +1139,62 @@ function renderPreview() {
 
 $('#imp-columns').addEventListener('change', () => { syncModeVisibility(); recompute(); });
 $('#imp-tz').addEventListener('change', recompute);
+$('#imp-split').addEventListener('change', updateSplitHint);
+
+// ---- Splitting one file into several datasets (e.g. one per vehicle)
+
+const SPLIT_HINT = /vehicle|device|unit|tracker|asset|imei|registration|^reg$|callsign|driver|team|crew|route|trip|van|truck|lorry|fleet/i;
+const MAX_SPLIT = 200;
+
+/** Group points by the value of a column. Returns [[value, points]] sorted by value. */
+function groupBy(points, key) {
+  const groups = new Map();
+  for (const p of points) {
+    const v = String(p.props?.[key] ?? '').trim() || '(blank)';
+    if (!groups.has(v)) groups.set(v, []);
+    groups.get(v).push(p);
+  }
+  return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
+}
+
+/** Columns that could sensibly split this file, and the one to suggest. */
+function splitCandidates(points) {
+  const keys = new Set();
+  for (const p of points.slice(0, 500)) Object.keys(p.props || {}).forEach((k) => keys.add(k));
+  const out = [];
+  for (const k of keys) {
+    const distinct = new Set();
+    for (const p of points) {
+      distinct.add(String(p.props?.[k] ?? '').trim());
+      if (distinct.size > MAX_SPLIT) break;
+    }
+    // Worth splitting: 2+ groups, and groups bigger than one point on average
+    if (distinct.size >= 2 && distinct.size <= MAX_SPLIT && distinct.size <= points.length / 2) out.push({ key: k, count: distinct.size });
+  }
+  const suggested = out.find((c) => SPLIT_HINT.test(c.key) && c.count <= 50);
+  return { list: out, suggested: suggested ? suggested.key : '' };
+}
+
+function fillSplitSelect() {
+  const sel = $('#imp-split');
+  const prev = pending.splitTouched ? sel.value : null;
+  const { list, suggested } = splitCandidates(pending.result.points);
+  sel.innerHTML = '<option value="">Don\'t split (keep as one dataset)</option>' +
+    list.map((c) => `<option value="${esc(c.key)}">${esc(c.key)} (${c.count} groups)</option>`).join('');
+  $('#imp-split-field').hidden = !list.length;
+  sel.value = prev !== null && list.some((c) => c.key === prev) ? prev : suggested;
+  updateSplitHint();
+}
+
+function updateSplitHint() {
+  const key = $('#imp-split').value;
+  const hint = $('#imp-split-hint');
+  if (document.activeElement === $('#imp-split')) pending.splitTouched = true;
+  if (!key) { hint.textContent = 'Choose a column such as Vehicle or Device to give each one its own dataset, marker and colour.'; return; }
+  const groups = groupBy(pending.result.points, key);
+  const shown = groups.slice(0, 6).map(([v, pts]) => `${v} (${pts.length.toLocaleString()})`).join(', ');
+  hint.textContent = `This will make ${groups.length} datasets, each with its own colour: ${shown}${groups.length > 6 ? `, and ${groups.length - 6} more` : ''}.`;
+}
 
 /** Explain whether the import time zone matters for this file. */
 function updateZoneHint() {
@@ -1082,6 +1226,29 @@ $('#btn-import-go').addEventListener('click', () => {
   };
   prefs.lastImportTz = $('#imp-tz').value ? importZone() : '';
   savePrefs();
+  const splitKey = $('#imp-split-field').hidden ? '' : $('#imp-split').value;
+  if (splitKey) {
+    const groups = groupBy(ds.points, splitKey);
+    const base = ds.style;
+    const colour0 = Math.max(0, PALETTE.indexOf(base.color));
+    const shape0 = Math.max(0, SHAPE_ORDER.indexOf(base.shape));
+    groups.forEach(([value, pts], k) => {
+      addDataset({
+        ...ds,
+        id: uid(),
+        name: `${ds.name}: ${value}`,
+        points: pts,
+        skipped: k === 0 ? ds.skipped : [],
+        // Each group gets the next colour; after every 10, the next shape too
+        style: { ...base, color: PALETTE[(colour0 + k) % PALETTE.length], shape: SHAPE_ORDER[(shape0 + Math.floor(k / PALETTE.length)) % SHAPE_ORDER.length] },
+      });
+    });
+    addedThisSession += groups.length;
+    trackEvent('import-split');
+    announce(`Added ${groups.length} datasets from ${pending.item.name}, split by ${splitKey}.`);
+    nextInQueue();
+    return;
+  }
   addDataset(ds);
   addedThisSession++;
   trackEvent(pending.item.name === 'Pasted data' ? 'import-paste' : 'import-file');

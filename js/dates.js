@@ -276,6 +276,12 @@ export function displayTimeZone() {
   return displayZone || deviceTimeZone();
 }
 
+/** Short form for scales and legends: "08:11" (withDate false) or "14 Mar, 08:11". Uses the display zone. */
+export function formatShort(ms, withDate) {
+  const opts = withDate ? { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' } : { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' };
+  try { return new Intl.DateTimeFormat(undefined, displayZone ? { ...opts, timeZone: displayZone } : opts).format(new Date(ms)); } catch { return formatDateTime(ms); }
+}
+
 export function formatDateTime(ms) {
   return ms === null || ms === undefined ? '—' : dtf.format(new Date(ms));
 }
