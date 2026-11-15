@@ -4,14 +4,15 @@
 const DB_NAME = 'map-data-overlay';
 const STORE = 'kv';
 let dbPromise = null;
+let db = null; // the open database, once ready, so writes can start without waiting
 
 function open() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
-    if (!('indexedDB' in window)) { reject(new Error('IndexedDB unavailable')); return; }
+    if (!window.indexedDB) { reject(new Error('IndexedDB unavailable')); return; }
     const req = indexedDB.open(DB_NAME, 1);
     req.onupgradeneeded = () => req.result.createObjectStore(STORE);
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => { db = req.result; resolve(db); };
     req.onerror = () => reject(req.error);
   });
   return dbPromise;
@@ -30,20 +31,32 @@ export async function get(key) {
   }
 }
 
-export async function set(key, value) {
-  try {
-    const db = await open();
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readwrite');
+/**
+ * Save a value. Resolves to true if it was written, false if not (for example
+ * when storage is full or unavailable).
+ *
+ * When the database is already open the write starts immediately, in the same
+ * task, and is committed straight away. That matters when the page is being
+ * closed or reloaded: a write that only starts later would be abandoned.
+ */
+export function set(key, value) {
+  if (db) return write(db, key, value);
+  return open().then((d) => write(d, key, value), () => false);
+}
+
+function write(database, key, value) {
+  return new Promise((resolve) => {
+    try {
+      const tx = database.transaction(STORE, 'readwrite');
       tx.objectStore(STORE).put(value, key);
-      tx.oncomplete = resolve;
-      tx.onerror = () => reject(tx.error);
-      tx.onabort = () => reject(tx.error || new Error('Save aborted')); // e.g. storage full
-    });
-    return true;
-  } catch {
-    return false;
-  }
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+      tx.onabort = () => resolve(false); // e.g. storage full
+      tx.commit?.();
+    } catch {
+      resolve(false);
+    }
+  });
 }
 
 /** Ask the browser not to clear our data when space runs low. Returns true if it agreed. */
