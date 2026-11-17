@@ -1,7 +1,8 @@
-// The Export dialog: PDF report or replay video.
+// The Export dialog: PDF report, replay video or interactive map file.
 
 import { trackEvent } from './analytics.js';
 import { buildPdf, recordVideo, videoSupport } from './exporters.js';
+import { buildInteractiveMap } from './interactive.js';
 import { map, replay } from './mapview.js';
 import { datasets, layers, prefs, sequenceOf } from './state.js';
 import { getScale, setScale } from './colour.js';
@@ -36,7 +37,7 @@ export function canVideo() { return replay.hasTimedData() && !!videoSupport(); }
 export function syncExportKind() {
   const kind = exportKind();
   $$('[data-kind]', exportDlg).forEach((el) => { el.hidden = el.dataset.kind !== kind; });
-  $('#ex-go').textContent = kind === 'pdf' ? 'Create PDF' : 'Record video';
+  $('#ex-go').textContent = { pdf: 'Create PDF', video: 'Record video', map: 'Save map file' }[kind];
   const follow = $('[name="exview"][value="follow"]');
   if (kind !== 'video' && follow.checked) $('[name="exview"][value="fit"]').checked = true;
   const view = $('[name="exview"]:checked').value;
@@ -83,7 +84,7 @@ export function setExportBusy(busy) {
   });
   $('#ex-go').disabled = busy;
   $('#ex-cancel').textContent = busy && exportKind() === 'video' ? 'Stop recording' : 'Cancel';
-  $('#ex-cancel').disabled = busy && exportKind() === 'pdf';
+  $('#ex-cancel').disabled = busy && exportKind() !== 'video';
 }
 
 export function exportProgress(frac, msg) {
@@ -98,7 +99,7 @@ export async function runExport() {
   const view = $('[name="exview"]:checked').value;
   const visible = datasets.filter((d) => d.visible);
   const stamp = new Date().toISOString().slice(0, 10);
-  const base = `${safeFilename(title || (kind === 'pdf' ? 'map-report' : 'route-replay'))}_${stamp}`;
+  const base = `${safeFilename(title || ({ pdf: 'map-report', video: 'route-replay', map: 'interactive-map' }[kind]))}_${stamp}`;
   const controller = new AbortController();
   exportRun = { kind, controller };
   setExportBusy(true);
@@ -128,6 +129,21 @@ export async function runExport() {
       toast('PDF report saved to your downloads.');
       trackEvent('export-pdf');
       announce('PDF report saved');
+    } else if (kind === 'map') {
+      exportProgress(0.3, 'Putting the map file together…');
+      const c = map.getCenter();
+      const blob = await buildInteractiveMap(visible, {
+        title,
+        branding: brandingForExport(),
+        basemap: prefs.basemap,
+        view: view === 'current' ? { center: [c.lat, c.lng], zoom: map.getZoom() } : null,
+        filterText: isActive(prefs.filter) ? filterText() : '',
+      });
+      downloadBlob(`${base}.html`, blob);
+      exportDlg.close();
+      toast('Interactive map saved to your downloads. Send it to anyone: it opens in any web browser.');
+      announce('Interactive map saved');
+      trackEvent('export-map');
     } else {
       exportProgress(0, 'Getting the map ready…');
       const res = await recordVideo({

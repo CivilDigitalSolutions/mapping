@@ -19,6 +19,8 @@ A progressive web app (PWA) for putting coordinate data on a map. Upload CSV fil
 - **Point details:** date and time, coordinates (with a copy button), and the distance and time since the previous point, plus every other column from the row. *Previous* and *Next* buttons step along the track.
 - **Route replay:** a time slider plays the routes back. You can scrub to any moment, step from point to point, pick the speed (whole route in 15 s to 2 min, real time, or 1 min/10 min/1 hour/1 day per second), keep the whole trail or only the last 15 minutes, hour or day, and have the map follow the moving markers. Space plays and pauses, and Esc closes the replay.
 - **Video export:** saves the replay as an MP4 video (WebM in Firefox), in HD or Full HD and 15 seconds to 2 minutes long. The video shows a title, a running date/time clock, a legend and a progress bar. The camera can be **fixed** (fit all the data, or the current map view) or set to **follow the route**: it glides along with one dataset's moving marker, or with all moving datasets, at close-up, medium or wide zoom. Every setting is locked when recording starts. The video draws its own map, so moving the map on screen during a recording has no effect. In browsers with WebCodecs (Chrome, Edge, Safari, recent Firefox) each frame is encoded to H.264 MP4 as soon as it's drawn, so a video is made several times faster than it plays (a 33-second video takes about 8 seconds in testing); other browsers record in real time.
+- **Interactive map file:** *Export → Interactive map file* saves one HTML file (about 200 KB plus the data) that anyone can open in a web browser, with nothing to install: zoom and pan, click points for their details, switch datasets on and off, change the background, open each dataset's table, and play the replay with a time slider. It includes your logo and organisation name, colour scales, the filter (and says so), and shows times in the zone you chose. Leaflet and the data are inside the file; only the map background needs the internet.
+- **Who was here?:** in the Datasets panel, pick a place on the map (or use the map centre, or type coordinates) and a distance (25 m to 1 km). Every visible dataset's visits are listed with arrival and departure times, how long it stayed and how close it came. Routes are followed between recorded points, so a vehicle that drove past between two fixes is still found ("passed by between recorded points"), and datasets that didn't come close show their nearest approach. The place can be dragged, follows the filter, and the results can be saved as CSV.
 - **PDF report:** a landscape A4 or US Letter report for clients, with a title, "prepared for" line and notes, a full-page map with a legend, a summary table (points, first/last time, duration, route distance, average speed), and optional tables of every point.
 - **Your branding on exports:** in the Export dialog, choose a logo (PNG, JPEG, SVG or WebP; it's converted to PNG, empty space around it is trimmed automatically, and it's stored at up to 1600 × 800 so it stays sharp) and type an organisation name. **Size sliders** (50–300%) set how big the logo is on PDFs and on videos separately, with live previews of each, and videos can show the logo on a white panel or straight on the map. They're remembered in this browser. The logo appears top-right of the PDF's first page and the name in every page footer. In videos, both appear in the top-right corner. A **scale bar** (metric and imperial) and **north arrow** are added to the PDF map and videos; this can be turned off.
 - **Replay details:** when a dataset is coloured by value, the moving route line is coloured too, in replay and in videos. While a vehicle is parked in one of its stops, a "Stopped 6m" label counts up beside it.
@@ -57,7 +59,7 @@ The app will be at `https://<org>.github.io/<repo>/`.
 
 The app can count visits with [GoatCounter](https://www.goatcounter.com). It's free for non-commercial use, uses no cookies (so no cookie banner is needed) and doesn't identify people. To turn it on, set `GOATCOUNTER_CODE` in `js/config.js` to your GoatCounter code, e.g. `'datamapper'` for `datamapper.goatcounter.com`. Leave it as `''` to turn counting off. Nothing is counted when running on localhost.
 
-Besides page views, it counts these feature uses, by name only: `import-file`, `import-paste`, `sample-data`, `replay`, `export-pdf`, `export-video` and `export-video-follow`. They appear under **Events** in the GoatCounter dashboard. No coordinates, file contents or dataset names are ever sent.
+Besides page views, it counts these feature uses, by name only: `import-file`, `import-paste`, `sample-data`, `replay`, `export-pdf`, `export-video`, `export-video-follow` and `export-map`. They appear under **Events** in the GoatCounter dashboard. No coordinates, file contents or dataset names are ever sent.
 
 ### Hosting for your organisation
 
@@ -79,7 +81,7 @@ npm run test:e2e     # browser tests: the whole app in headless Chromium (about 
 npm run test:all     # both
 ```
 
-The browser tests (`tests/e2e/`) cover importing every file type, splitting files, time zones, filters, stops and GPS jumps, branding (logo upload), the map, popups and keyboard access, styles, colour by value and shared scales, the points table (search, sort, edit, delete), Undo, replay, PDF and video exports (fast and real-time), project files and storage warnings, accessibility checks (axe-core) in light and dark mode, and speed with 25,000 points. They start their own web server and use stand-in map tiles, so they never touch the internet.
+The browser tests (`tests/e2e/`) cover importing every file type, splitting files, time zones, filters, stops and GPS jumps, branding (logo upload), the map, popups and keyboard access, styles, colour by value and shared scales, the points table (search, sort, edit, delete), "Who was here?", the interactive map file (opened on its own, desktop and phone), Undo, replay, PDF and video exports (fast and real-time), project files and storage warnings, accessibility checks (axe-core) in light and dark mode, and speed with 25,000 points. They start their own web server and use stand-in map tiles, so they never touch the internet.
 
 GitHub runs all of these on every push and pull request. The site is only deployed when they all pass.
 
@@ -96,9 +98,12 @@ js/panel.js           Datasets panel, Undo, "Keep your work safe", "Show times i
 js/import-flow.js     Add data dialog: columns, time zones, splitting, samples
 js/style-controls.js  Marker/line style controls and the time zone picker
 js/settings.js        A dataset's Style dialog
+js/nearby.js          "Who was here?" calculations (visits within a distance, entry/exit times)
+js/nearby-ui.js       "Who was here?" panel: pick a place, list visits, CSV
+js/interactive.js     Interactive map file export (one self-contained HTML file)
 js/table.js           Points table (search, sort, edit, delete) and GeoJSON / CSV export
 js/project-ui.js      Saving and opening project files
-js/export-ui.js       Export dialog (PDF / video)
+js/export-ui.js       Export dialog (PDF / video / interactive map file)
 js/importers.js       CSV/paste parsing, column detection, GeoJSON/GPX/KML
 js/coords.js          Coordinate parsing (decimal, DMS, combined, WKT)
 js/dates.js           Date/time parsing and formatting
@@ -119,6 +124,7 @@ js/store.js           IndexedDB persistence
 js/config.js          Map tile providers
 sw.js                 Service worker (offline + tile cache)
 manifest.webmanifest  PWA manifest
+viewer/               The viewer inside interactive map files (script + styles)
 vendor/               Leaflet 1.9.4, PapaParse 5.4.1, jsPDF 2.5.1 + AutoTable 3.8.2, mp4-muxer 5.2.2 (bundled for offline use)
 tests/                Unit tests (*.test.mjs) and browser tests (e2e/)
 ```

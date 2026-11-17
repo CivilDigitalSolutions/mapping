@@ -7,7 +7,8 @@ import { BASEMAPS } from './config.js';
 import { deviceTimeZone, setDisplayTimeZone } from './dates.js';
 import { SAMPLES } from './samples.js';
 import * as store from './store.js';
-import './export-ui.js'; // sets up the Export dialog (PDF / video)
+import './export-ui.js'; // sets up the Export dialog (PDF / video / map file)
+import './nearby-ui.js'; // "Who was here?" in the Datasets panel
 import { loadSamples, openImport } from './import-flow.js';
 import { baseLayers, fitAll, map, renderAll, replay } from './mapview.js';
 import { panel, panelBtn, renderList, updateStorageStatus, updateStorageUsage } from './panel.js';

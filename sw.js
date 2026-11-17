@@ -1,7 +1,7 @@
 // Service worker: makes the app installable and usable offline.
 // - App files are pre-cached (bump VERSION whenever you change them).
 // - Map tiles are cached as you browse (newest 3000 kept), so areas you've viewed still show offline.
-const VERSION = 'v16';
+const VERSION = 'v17';
 const APP_CACHE = `app-${VERSION}`;
 const TILE_CACHE = 'tiles-v1';
 const MAX_TILES = 3000;
@@ -27,7 +27,10 @@ const APP_FILES = [
   'js/icons.js',
   'js/import-flow.js',
   'js/importers.js',
+  'js/interactive.js',
   'js/mapview.js',
+  'js/nearby-ui.js',
+  'js/nearby.js',
   'js/panel.js',
   'js/pointlayer.js',
   'js/project-ui.js',
@@ -49,6 +52,8 @@ const APP_FILES = [
   'vendor/jspdf/jspdf.umd.min.js',
   'vendor/jspdf/jspdf.plugin.autotable.min.js',
   'vendor/mp4-muxer/mp4-muxer.mjs',
+  'viewer/viewer.js',
+  'viewer/viewer.css',
   'icons/icon.svg',
   'icons/icon-192.png',
   'icons/icon-512.png',

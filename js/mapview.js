@@ -350,8 +350,12 @@ export function pointTitle(ds, i) {
   return `${ds.name}: ${[name, p.t != null ? formatDateTime(p.t) : null].filter(Boolean).join(', ')}`;
 }
 
+/** Set `pick` to a function to have the next map clicks choose a place instead (e.g. "Who was here?"). */
+export const mapClick = { pick: null };
+
 // Clicking a marker opens its details
 map.on('click', (e) => {
+  if (mapClick.pick) { mapClick.pick(e.latlng); return; }
   const hit = hitTest(e.containerPoint);
   if (hit) openPointPopup(hit.ds, hit.i);
 });
