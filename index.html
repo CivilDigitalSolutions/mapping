@@ -132,6 +132,42 @@
           </fieldset>
         </form>
       </details>
+      <details class="tool-box" id="nearby-box">
+        <summary>
+          <span class="tool-title">Who was here?</span>
+          <span class="tool-status" id="nearby-summary">Pick a place</span>
+        </summary>
+        <div class="tool-body">
+          <p class="hint">Choose a place to see every visible dataset that came near it, and when. Routes are followed between recorded points, so passing by between two fixes still counts.</p>
+          <div class="tool-row">
+            <button type="button" class="btn btn-sm" id="nb-pick" aria-pressed="false">Pick on the map</button>
+            <button type="button" class="btn btn-sm" id="nb-centre">Use the map centre</button>
+          </div>
+          <form class="tool-row" id="nb-coords-form" novalidate>
+            <label for="nb-coords" class="sr-only">Coordinates of the place</label>
+            <input type="text" id="nb-coords" placeholder="or type coordinates, e.g. 51.5074, -0.1278" autocomplete="off" aria-describedby="nb-coords-err">
+            <button type="submit" class="btn btn-sm">Go</button>
+          </form>
+          <p class="field-error" id="nb-coords-err" hidden></p>
+          <div class="tool-row">
+            <label>within
+              <select id="nb-radius">
+                <option value="25">25 m</option>
+                <option value="50" selected>50 m</option>
+                <option value="100">100 m</option>
+                <option value="250">250 m</option>
+                <option value="500">500 m</option>
+                <option value="1000">1 km</option>
+              </select>
+            </label>
+          </div>
+          <div id="nb-results" class="nb-results" aria-live="polite"></div>
+          <div class="tool-row" id="nb-actions" hidden>
+            <button type="button" class="btn btn-sm" id="nb-csv">Save results (CSV)</button>
+            <button type="button" class="btn btn-sm" id="nb-clear">Clear</button>
+          </div>
+        </div>
+      </details>
       <div id="empty-state" class="empty-state">
         <p><strong>No data yet.</strong></p>
         <p>Upload a CSV file or paste rows of latitude and longitude, with dates and times if you have them.</p>
@@ -457,6 +493,8 @@
           <li><strong>Pick a marker:</strong> give each dataset its own shape (circle, square, triangle, waypoint pin, flag and others) and colour so you can tell them apart.</li>
           <li><strong>One file, many vehicles:</strong> if a file has a column such as Vehicle or Device, choose it under <em>Split into separate datasets by</em>. Each one becomes its own dataset with its own colour.</li>
           <li><strong>Colour by value:</strong> in a dataset's <em>Style</em>, choose <em>Colour markers and line by</em> speed, time or any number column. Low values are dark purple and high values are yellow. The scale shows on the dataset's card and in exports. Datasets coloured the same way share one scale, so a colour means the same value on each.</li>
+          <li><strong>Who was here?</strong> open <em>Who was here?</em> in the Datasets panel, then pick a place on the map (or type its coordinates) and a distance. You'll see when each vehicle or crew was there, for how long, and how close it came. Drag the purple dot to move the place.</li>
+          <li><strong>Interactive map file:</strong> in <em>Export</em>, choose <em>Interactive map file</em> to save a single file you can email to a client. It opens in any web browser, where they can click points, see tables and play the replay.</li>
           <li><strong>Fix bad points:</strong> open a dataset's <em>Table</em> to search and sort its points. Tick points and choose <em>Delete selected</em>, or press <em>Edit</em> to correct a point's name, time, position or other values. With a filter on, you can delete every point the filter hides. Each change can be undone.</li>
           <li><strong>Filter:</strong> open <em>Filter</em> in the Datasets panel to show only a date and time range, certain hours of each day, or points matching a rule such as "Vehicle is VAN-02" or "Speed is at least 30". Everything follows the filter, including replay and exports. Press <em>Clear filter</em> to see everything again.</li>
           <li><strong>Stops and problems:</strong> a pause sign marks each stop (with how long it lasted), a short "//" break across the line marks a gap in the recording, and a small red triangle marks a possible GPS jump. Select one for details. They're also listed on each dataset's card (<em>List them</em>). Change what counts under <em>Stops and problems</em> in the Datasets panel. To remove a bad GPS reading, open its triangle and choose <em>Remove this point</em>.</li>
@@ -514,6 +552,11 @@
             <input type="radio" name="exportkind" value="video">
             <span class="choice-title">Video of the replay</span>
             <span class="choice-desc" id="video-desc">The routes moving over time, with the date and time on screen. Good for presentations.</span>
+          </label>
+          <label class="choice-card">
+            <input type="radio" name="exportkind" value="map">
+            <span class="choice-title">Interactive map file</span>
+            <span class="choice-desc">One HTML file that opens in any browser: zoom, click points, view tables and play the replay. Nothing to install.</span>
           </label>
         </fieldset>
 

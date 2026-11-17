@@ -282,6 +282,12 @@ export function formatShort(ms, withDate) {
   try { return new Intl.DateTimeFormat(undefined, displayZone ? { ...opts, timeZone: displayZone } : opts).format(new Date(ms)); } catch { return formatDateTime(ms); }
 }
 
+/** Just the time of day, with seconds and the zone: "08:13:33 GMT". Uses the display zone. */
+export function formatTime(ms) {
+  const opts = { timeStyle: 'long' };
+  try { return new Intl.DateTimeFormat(undefined, displayZone ? { ...opts, timeZone: displayZone } : opts).format(new Date(ms)); } catch { return formatDateTime(ms); }
+}
+
 export function formatDateTime(ms) {
   return ms === null || ms === undefined ? '—' : dtf.format(new Date(ms));
 }

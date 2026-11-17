@@ -44,6 +44,7 @@ test('the service worker keeps every app file for offline use', () => {
     'index.html', 'css/app.css', 'manifest.webmanifest',
     'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'vendor/papaparse.min.js',
     'vendor/jspdf/jspdf.umd.min.js', 'vendor/jspdf/jspdf.plugin.autotable.min.js',
+    'vendor/mp4-muxer/mp4-muxer.mjs', 'viewer/viewer.js', 'viewer/viewer.css',
   ].filter((f) => !listed.has(f));
   assert.deepEqual(missing, [], `add these to APP_FILES in sw.js: ${missing.join(', ')}`);
   for (const f of listed) {
