@@ -9,6 +9,7 @@
 import { markerSvg, anchorFor, textLabel } from './icons.js';
 import { formatDateTime, formatDuration } from './dates.js';
 import { getScale, binColour } from './colour.js';
+import { unwrapLon } from './coords.js';
 
 const SLIDER_STEPS = 1000;
 
@@ -63,9 +64,21 @@ export function createReplay({ map, getDatasets, layers, announce }) {
         pts: ds.points
           .map((p, i) => ({ i, lat: p.lat, lon: p.lon, t: p.t }))
           .filter((p) => p.t !== null && p.t !== undefined && (!mask || mask[p.i]))
-          .sort((a, b) => a.t - b.t || a.i - b.i),
+          .sort((a, b) => a.t - b.t || a.i - b.i)
+          // Cross the date line the short way (see unwrapLon)
+          .map((p, k, arr) => { if (k) p.lon = unwrapLon(arr[k - 1].lon, p.lon); return p; }),
       }))
       .filter((tr) => tr.pts.length > 0);
+  }
+
+  /** True if the visible data has at least two different times (so there's something to play). */
+  function hasTimeSpan() {
+    let lo = Infinity, hi = -Infinity;
+    for (const ds of getDatasets()) {
+      if (!ds.visible) continue;
+      for (const p of ds.points) if (p.t != null) { if (p.t < lo) lo = p.t; if (p.t > hi) hi = p.t; }
+    }
+    return hi > lo;
   }
 
   function hasTimedData() {
@@ -398,6 +411,7 @@ export function createReplay({ map, getDatasets, layers, announce }) {
     /** Datasets currently being replayed (visible ones with dates). */
     get datasets() { return state.tracks.map((t) => t.ds); },
     hasTimedData,
+    hasTimeSpan,
     /** Current positions of the moving markers: [{ ds, latlng }]. */
     heads() {
       return state.tracks.filter((tr) => tr.group.hasLayer(tr.head)).map((tr) => ({

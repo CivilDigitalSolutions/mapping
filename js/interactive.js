@@ -98,6 +98,8 @@ export async function buildInteractiveMap(datasets, opts) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="Data Mapper">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: https://tile.openstreetmap.org https://*.tile.opentopomap.org https://server.arcgisonline.com; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <title>${title}</title>
 <style>${inScript(leafletCss)}</style>
 <style>${inScript(viewerCss)}</style>

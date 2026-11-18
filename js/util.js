@@ -49,6 +49,17 @@ export function download(filename, text, type) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
+/**
+ * A value made safe for a CSV cell. Spreadsheets run text starting with
+ * = + - @ (or a tab / return) as a formula, so such text gets a leading
+ * apostrophe. Plain numbers like -0.1278 are left alone.
+ */
+export function csvCell(v) {
+  if (typeof v === 'number') return v;
+  const s = String(v ?? '');
+  return /^[=+\-@\t\r]/.test(s) && !/^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(s) ? `'${s}` : s;
+}
+
 export function safeFilename(s) { return String(s).replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_') || 'dataset'; }
 
 /**

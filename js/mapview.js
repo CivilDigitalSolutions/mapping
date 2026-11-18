@@ -5,7 +5,7 @@
 
 import { binColour, colourKey, computeColours, getScale, setScale } from './colour.js';
 import { BASEMAPS, DEFAULT_VIEW } from './config.js';
-import { bearing, distanceMetres, formatCoord } from './coords.js';
+import { bearing, distanceMetres, formatCoord, unwrapRoute } from './coords.js';
 import { displayTimeZone, formatDateTime, formatDistance, formatDuration } from './dates.js';
 import { anchorFor, arrowSvg, eventIcon, markerSvg } from './icons.js';
 import { PointLayer, popupOffset } from './pointlayer.js';
@@ -94,7 +94,7 @@ function drawDataset(ds) {
 
   // Line first so it draws under the markers
   if (st.showLine && order.length > 1) {
-    const latlngs = order.map((i) => [ds.points[i].lat, ds.points[i].lon]);
+    const latlngs = unwrapRoute(order.map((i) => [ds.points[i].lat, ds.points[i].lon]));
     const dash = st.lineStyle === 'dashed' ? '10 8' : st.lineStyle === 'dotted' ? '2 7' : null;
     const lineOpts = { interactive: false, lineCap: 'round', lineJoin: 'round' };
     if (!colours) {

@@ -2,10 +2,8 @@
 // stops, gaps in the recording and GPS jumps.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 import { startServer, launch, openApp, loadSamples, chooseFile, finishImport, cardMeta, writeTemp, fleetCsv, eventsCsv, download, waitForText, settle } from './helpers.mjs';
 
-const AXE = createRequire(import.meta.url)('axe-core').source;
 
 let server, browser;
 before(async () => { server = await startServer(); browser = await launch(); });
@@ -194,7 +192,7 @@ test('no accessibility problems with the filter and stop boxes open and badges s
   await page.click('#analysis-box > summary');
   await page.selectOption('#flt-field', 'Vehicle');
   await settle(page);
-  await page.addScriptTag({ content: AXE });
+  await page.addScriptTag({ url: '/node_modules/axe-core/axe.min.js' });
   const v = await page.evaluate(async () => (await window.axe.run(document, { resultTypes: ['violations'] }))
     .violations.map((x) => `${x.id}: ${x.help} (${x.nodes.map((n) => n.target.join(' ')).slice(0, 3).join(' | ')})`));
   assert.deepEqual(v, []);

@@ -1,7 +1,7 @@
 // Service worker: makes the app installable and usable offline.
 // - App files are pre-cached (bump VERSION whenever you change them).
 // - Map tiles are cached as you browse (newest 3000 kept), so areas you've viewed still show offline.
-const VERSION = 'v17';
+const VERSION = 'v18';
 const APP_CACHE = `app-${VERSION}`;
 const TILE_CACHE = 'tiles-v1';
 const MAX_TILES = 3000;
@@ -78,16 +78,20 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  if (TILE_HOSTS.some((h) => url.hostname.endsWith(h))) {
+  if (TILE_HOSTS.some((h) => url.hostname === h || url.hostname.endsWith(`.${h}`))) {
     event.respondWith(tile(req));
     return;
   }
   if (url.origin === self.location.origin) {
     // Network first for the page itself so updates show up; cache first for everything else.
     if (req.mode === 'navigate') {
+      // Only a good copy of the app's own page replaces the saved one (never a 404 or an error page)
+      const isAppPage = new URL('./', self.location).pathname === url.pathname || url.pathname.endsWith('/index.html');
       event.respondWith(fetch(req).then((res) => {
-        const copy = res.clone();
-        caches.open(APP_CACHE).then((c) => c.put('./', copy));
+        if (res.ok && isAppPage) {
+          const copy = res.clone();
+          caches.open(APP_CACHE).then((c) => c.put('./', copy));
+        }
         return res;
       }).catch(() => caches.match('./')));
       return;
@@ -101,7 +105,9 @@ async function tile(req) {
   const hit = await cache.match(req);
   if (hit) return hit; // cache first: kinder to the free tile servers, and works offline
   const network = fetch(req).then(async (res) => {
-    if (res.ok || res.type === 'opaque') {
+    // Opaque (no-CORS) responses aren't kept: browsers count each one as several MB of storage,
+    // which could crowd out people's saved data
+    if (res.ok) {
       await cache.put(req, res.clone());
       trim(cache);
     }

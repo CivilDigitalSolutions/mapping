@@ -59,7 +59,7 @@ The app will be at `https://<org>.github.io/<repo>/`.
 
 The app can count visits with [GoatCounter](https://www.goatcounter.com). It's free for non-commercial use, uses no cookies (so no cookie banner is needed) and doesn't identify people. To turn it on, set `GOATCOUNTER_CODE` in `js/config.js` to your GoatCounter code, e.g. `'datamapper'` for `datamapper.goatcounter.com`. Leave it as `''` to turn counting off. Nothing is counted when running on localhost.
 
-Besides page views, it counts these feature uses, by name only: `import-file`, `import-paste`, `sample-data`, `replay`, `export-pdf`, `export-video`, `export-video-follow` and `export-map`. They appear under **Events** in the GoatCounter dashboard. No coordinates, file contents or dataset names are ever sent.
+Besides page views, it counts these feature uses, by name only: `import-file`, `import-paste`, `sample-data`, `replay`, `export-pdf`, `export-video`, `export-video-follow` and `export-map`. They appear under **Events** in the GoatCounter dashboard. No coordinates, file contents or dataset names are ever sent. Counts are sent as plain image requests: no GoatCounter script is loaded into the app, so no outside code ever runs alongside people's data.
 
 ### Hosting for your organisation
 
@@ -67,9 +67,13 @@ Copy the folder to any static host: GitHub Pages, Netlify, Azure Static Web Apps
 
 When you change any app file, bump `VERSION` in `sw.js` so installed copies pick up the update.
 
+### Security
+
+See [docs/security-audit.md](docs/security-audit.md) for the latest audit. In short: all data stays in the browser; the app runs only its own scripts (a Content-Security-Policy refuses anything else); everything read from files, including project files, is checked and shown as text, never run; CSV exports neutralise spreadsheet formulas; and saved map files carry their own policy that stops them sending data anywhere.
+
 ### Map tiles
 
-The background layers are set in `js/config.js`. They're free, but each provider has a fair-use policy. OpenStreetMap's tile servers are meant for light use. If your organisation will use the app heavily, point `BASEMAPS` at your own tile server or a provider you have an agreement with. Only that file needs to change.
+The background layers are set in `js/config.js`. They're free, but each provider has a fair-use policy. OpenStreetMap's tile servers are meant for light use. If your organisation will use the app heavily, point `BASEMAPS` at your own tile server or a provider you have an agreement with. Also add the new tile host to `img-src` in the Content-Security-Policy at the top of `index.html` (and in `js/interactive.js` for map files), or the browser will refuse to load its tiles.
 
 ## Tests
 
@@ -81,7 +85,7 @@ npm run test:e2e     # browser tests: the whole app in headless Chromium (about 
 npm run test:all     # both
 ```
 
-The browser tests (`tests/e2e/`) cover importing every file type, splitting files, time zones, filters, stops and GPS jumps, branding (logo upload), the map, popups and keyboard access, styles, colour by value and shared scales, the points table (search, sort, edit, delete), "Who was here?", the interactive map file (opened on its own, desktop and phone), Undo, replay, PDF and video exports (fast and real-time), project files and storage warnings, accessibility checks (axe-core) in light and dark mode, and speed with 25,000 points. They start their own web server and use stand-in map tiles, so they never touch the internet.
+The browser tests (`tests/e2e/`) cover importing every file type, splitting files, time zones, filters, stops and GPS jumps, branding (logo upload), the map, popups and keyboard access, styles, colour by value and shared scales, the points table (search, sort, edit, delete), "Who was here?", the interactive map file (opened on its own, desktop and phone), hostile input (script injection in CSVs and project files, spreadsheet formulas, the security policy), Undo, replay, PDF and video exports (fast and real-time), project files and storage warnings, accessibility checks (axe-core) in light and dark mode, and speed with 25,000 points. They start their own web server and use stand-in map tiles, so they never touch the internet.
 
 GitHub runs all of these on every push and pull request. The site is only deployed when they all pass.
 
@@ -110,7 +114,7 @@ js/dates.js           Date/time parsing and formatting
 js/icons.js           SVG marker shapes and palette
 js/replay.js          Route replay / time slider
 js/pointlayer.js      Canvas marker layer (fast drawing, hit-testing, keyboard targets)
-js/project.js         Project file save / open
+js/project.js         Project file save / open, and checking everything read from one
 js/colour.js          Colour by value (speed, time, columns) and colour scale
 js/filters.js         Filter logic: date range, time of day, column / speed rules
 js/filter-ui.js       The Filter and "Stops and problems" boxes in the panel
@@ -125,6 +129,6 @@ js/config.js          Map tile providers
 sw.js                 Service worker (offline + tile cache)
 manifest.webmanifest  PWA manifest
 viewer/               The viewer inside interactive map files (script + styles)
-vendor/               Leaflet 1.9.4, PapaParse 5.4.1, jsPDF 2.5.1 + AutoTable 3.8.2, mp4-muxer 5.2.2 (bundled for offline use)
+vendor/               Leaflet 1.9.4, PapaParse 5.4.1, jsPDF 4.2.1 + AutoTable 5.0.9, mp4-muxer 5.2.2 (bundled for offline use)
 tests/                Unit tests (*.test.mjs) and browser tests (e2e/)
 ```
