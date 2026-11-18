@@ -13,7 +13,8 @@ import { loadSamples, openImport } from './import-flow.js';
 import { baseLayers, fitAll, map, renderAll, replay } from './mapview.js';
 import { panel, panelBtn, renderList, updateStorageStatus, updateStorageUsage } from './panel.js';
 import { saveProjectFile } from './project-ui.js';
-import { completePrefs, datasets, hooks, onChange, prefs } from './state.js';
+import { completePrefs, datasets, defaultStyle, hooks, onChange, prefs } from './state.js';
+import { cleanStyle } from './project.js';
 import { initFilterUi } from './filter-ui.js';
 import { fillZoneSelect } from './style-controls.js';
 import { $, $$, download, toast } from './util.js';
@@ -46,6 +47,8 @@ $('#btn-sample-csv').addEventListener('click', () => download('sample-track.csv'
 
   const saved = await store.get('datasets');
   if (Array.isArray(saved) && saved.length) {
+    // Styles are checked again on loading, in case saved data was changed outside the app
+    saved.forEach((d, n) => { d.style = cleanStyle(d.style, defaultStyle(n, d.points?.some((p) => p.t != null))); });
     datasets.push(...saved);
     renderAll();
     fitAll();

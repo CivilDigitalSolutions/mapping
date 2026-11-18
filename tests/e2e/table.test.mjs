@@ -2,10 +2,8 @@
 // filter hides, and edit a point.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 import { startServer, launch, openApp, loadSamples, cardMeta, waitForText, chooseFile, finishImport, writeTemp, bigCsv } from './helpers.mjs';
 
-const AXE = createRequire(import.meta.url)('axe-core').source;
 
 let server, browser;
 before(async () => { server = await startServer(); browser = await launch(); });
@@ -58,7 +56,7 @@ test('search and sort the points', async () => {
   assert.equal(await page.locator('th[aria-sort]').getAttribute('aria-sort'), 'descending');
 
   // Accessible in this state
-  await page.addScriptTag({ content: AXE });
+  await page.addScriptTag({ url: '/node_modules/axe-core/axe.min.js' });
   const result = await page.evaluate(async () => (await window.axe.run('#dlg-table', { resultTypes: ['violations'] })).violations.map((v) => `${v.id}: ${v.nodes.length}`));
   assert.deepEqual(result, []);
   assert.deepEqual(page.errors, []);

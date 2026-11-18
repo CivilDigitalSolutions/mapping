@@ -51,6 +51,18 @@
     return `<div class="v-pop"><h3>${esc(title)}</h3><p class="v-sub">${esc(ds.name)}${pos != null ? ` · ${pos + 1} of ${ds.order.length}` : ''}</p><dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl></div>`;
   }
 
+  // Lines cross the date line the short way, not right round the world
+  function unwrap(latlngs) {
+    for (let k = 1; k < latlngs.length; k++) {
+      let x = latlngs[k][1];
+      const prev = latlngs[k - 1][1];
+      while (x - prev > 180) x -= 360;
+      while (x - prev < -180) x += 360;
+      latlngs[k] = [latlngs[k][0], x];
+    }
+    return latlngs;
+  }
+
   // ---------------------------------------------------------------- datasets
   const MANY = 3000; // above this, markers are drawn as simple dots on a canvas for speed
   D.datasets.forEach((ds, k) => {
@@ -60,7 +72,7 @@
     const colourOf = (i) => (ds.colours ? ds.colours[ds.pts[i][4]] : ds.color);
     const ll = (i) => [ds.pts[i][0], ds.pts[i][1]];
     if (ds.showLine && ds.order.length > 1) {
-      const pts = ds.order.map(ll);
+      const pts = unwrap(ds.order.map(ll));
       L.polyline(pts, { pane: 'dmLines', color: '#fff', weight: 6, opacity: 0.75, interactive: false }).addTo(group);
       if (!ds.colours) {
         L.polyline(pts, { pane: 'dmLines', color: ds.color, weight: 3, opacity: 0.95, dashArray: ds.dash, interactive: false }).addTo(group);
@@ -196,7 +208,10 @@
     if (lo === tr.length - 1) return { k: lo, ll: [a[0], a[1]] };
     const b = P[tr[lo + 1]];
     const s = b[2] > a[2] ? (time - a[2]) / (b[2] - a[2]) : 0;
-    return { k: lo, ll: [a[0] + (b[0] - a[0]) * s, a[1] + (b[1] - a[1]) * s] };
+    let bLon = b[1];
+    while (bLon - a[1] > 180) bLon -= 360;
+    while (bLon - a[1] < -180) bLon += 360;
+    return { k: lo, ll: [a[0] + (b[0] - a[0]) * s, a[1] + (bLon - a[1]) * s] };
   }
 
   function drawReplay() {
@@ -207,6 +222,7 @@
       if (!at) return;
       const pts = ds.track.slice(0, at.k + 1).map((i) => [ds.pts[i][0], ds.pts[i][1]]);
       pts.push(at.ll);
+      unwrap(pts);
       L.polyline(pts, { pane: 'dmLines', color: '#fff', weight: 6, opacity: 0.75, interactive: false }).addTo(replayLayer);
       L.polyline(pts, { pane: 'dmLines', color: ds.color, weight: 3.5, interactive: false }).addTo(replayLayer);
       L.marker(at.ll, { icon: iconFor(ds, ds.color, null), interactive: false, keyboard: false }).addTo(replayLayer);

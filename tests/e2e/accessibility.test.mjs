@@ -1,18 +1,15 @@
 // Automated accessibility checks (axe-core) across the main screens, in light and dark mode.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 import { startServer, launch, openApp, loadSamples, pasteData } from './helpers.mjs';
 
-const require = createRequire(import.meta.url);
-const AXE = require('axe-core').source;
 
 let server, browser;
 before(async () => { server = await startServer(); browser = await launch(); });
 after(async () => { await browser.close(); await server.close(); });
 
 async function violations(page) {
-  if (!(await page.evaluate(() => !!window.axe))) await page.addScriptTag({ content: AXE });
+  if (!(await page.evaluate(() => !!window.axe))) await page.addScriptTag({ url: '/node_modules/axe-core/axe.min.js' });
   return page.evaluate(async () => (await window.axe.run(document, { resultTypes: ['violations'] }))
     .violations.map((v) => `${v.id}: ${v.help} (${v.nodes.map((n) => n.target.join(' ')).slice(0, 3).join(' | ')})`));
 }

@@ -104,7 +104,7 @@ export function parseTimeOfDay(input) {
   if (!s) return null;
   // Excel fraction of a day, e.g. 0.5 = 12:00
   if (/^0?\.\d+$/.test(s)) {
-    const total = Math.round(parseFloat(s) * 86400000);
+    const total = Math.round(parseFloat(s) * 86400) * 1000; // to the nearest second (08:00 is stored as 0.33333…)
     return { h: Math.floor(total / 3600000), m: Math.floor(total / 60000) % 60, s: Math.floor(total / 1000) % 60, ms: total % 1000 };
   }
   const m = s.match(/^(\d{1,2})(?::|\.|h)?(\d{2})?(?::(\d{2})(?:[.,](\d{1,3}))?)?\s*([AaPp]\.?[Mm]\.?)?\s*(Z|UTC|GMT|[+-]\d{2}:?\d{2})?$/);
@@ -180,7 +180,7 @@ function parseParts(input, order) {
     if (/^\d{13}$/.test(s)) return { abs: n };              // ms
     if (/^\d{10}(\.\d+)?$/.test(s)) return { abs: n * 1000 }; // seconds
     if (n > 20000 && n < 80000) {                           // Excel serial (1954 – 2119): a wall-clock date and time
-      const w = new Date(Math.round((n - 25569) * 86400000));
+      const w = new Date(Math.round((n - 25569) * 86400) * 1000); // to the nearest second
       return { y: w.getUTCFullYear(), mo: w.getUTCMonth(), d: w.getUTCDate(), t: { h: w.getUTCHours(), m: w.getUTCMinutes(), s: w.getUTCSeconds(), ms: 0, tz: '' } };
     }
     return null;

@@ -13,7 +13,8 @@ after(async () => { await browser.close(); await server.close(); });
 
 /** Open a saved file straight from disk, offline apart from (stand-in) map tiles. */
 async function openFile(file, options = {}) {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-GB', timezoneId: 'America/New_York', ...options });
+  // bypassCSP only so the accessibility checker can be added to the page
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-GB', timezoneId: 'America/New_York', bypassCSP: true, ...options });
   let other = 0;
   await ctx.route(/^https?:/, (r) => {
     if (/tile\.openstreetmap\.org/.test(r.request().url())) return r.fulfill({ status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#e8eee4"/></svg>' });

@@ -8,7 +8,7 @@ import { focusPoint, map, renderDataset, replay } from './mapview.js';
 import { SPEED_UNITS } from './analysis.js';
 import { formatCoord, parseLat, parseLon } from './coords.js';
 import { changed, layers, prefs, save } from './state.js';
-import { $, $$, announce, closePanelOnMobile, download, esc, safeFilename, toast } from './util.js';
+import { $, $$, announce, closePanelOnMobile, csvCell, download, esc, safeFilename, toast } from './util.js';
 
 /** Indexes of the points shown on the map (all of them when no filter is on), in route order. */
 function shownIndexes(ds) {
@@ -407,12 +407,16 @@ export function exportGeoJSON(ds) {
 }
 
 export function exportCSV(ds) {
-  const fields = [...new Set(ds.points.flatMap((p) => Object.keys(p.props || {})))];
-  const rows = [['name', 'latitude', 'longitude', 'datetime', ...fields]];
-  shownIndexes(ds).forEach((i) => {
-    const p = ds.points[i];
-    rows.push([p.label, p.lat, p.lon, p.t != null ? new Date(p.t).toISOString() : '', ...fields.map((f) => p.props?.[f] ?? '')]);
-  });
+  const shown = shownIndexes(ds).map((i) => ds.points[i]);
+  const BUILT_IN = ['name', 'latitude', 'longitude', 'datetime'];
+  // A column that just repeats the point's name (it came from that column) isn't written twice
+  const fields = [...new Set(ds.points.flatMap((p) => Object.keys(p.props || {})))]
+    .filter((f) => !(f.toLowerCase() === 'name' && shown.every((p) => (p.props?.[f] ?? '') === (p.label || ''))));
+  const header = (f) => (BUILT_IN.includes(f.toLowerCase()) ? `${f} (original)` : f);
+  const rows = [['name', 'latitude', 'longitude', 'datetime', ...fields.map(header)].map(csvCell)];
+  for (const p of shown) {
+    rows.push([p.label, p.lat, p.lon, p.t != null ? new Date(p.t).toISOString() : '', ...fields.map((f) => p.props?.[f] ?? '')].map(csvCell));
+  }
   download(`${safeFilename(ds.name)}.csv`, Papa.unparse(rows), 'text/csv');
   exported(ds, 'CSV');
 }

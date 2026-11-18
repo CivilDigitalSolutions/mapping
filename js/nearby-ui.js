@@ -9,7 +9,7 @@ import { markerSvg } from './icons.js';
 import { focusPoint, map, mapClick } from './mapview.js';
 import { visitsNear } from './nearby.js';
 import { datasets, layers, onChange } from './state.js';
-import { $, announce, closePanelOnMobile, download, esc } from './util.js';
+import { $, announce, closePanelOnMobile, csvCell, download, esc } from './util.js';
 
 let place = null;   // { lat, lon }
 let shapes = null;  // circle + centre marker on the map
@@ -122,7 +122,7 @@ function saveCsv() {
       ]);
     }
   }
-  download('who-was-here.csv', Papa.unparse(rows), 'text/csv');
+  download('who-was-here.csv', Papa.unparse(rows.map((r) => r.map(csvCell))), 'text/csv');
   announce('Results saved as CSV');
 }
 

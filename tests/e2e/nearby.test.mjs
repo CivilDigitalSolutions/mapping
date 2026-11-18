@@ -1,10 +1,8 @@
 // "Who was here?": choose a place and list each dataset's visits.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 import { startServer, launch, openApp, loadSamples, waitForText, download } from './helpers.mjs';
 
-const AXE = createRequire(import.meta.url)('axe-core').source;
 
 let server, browser;
 before(async () => { server = await startServer(); browser = await launch(); });
@@ -50,7 +48,7 @@ test('typed coordinates: visits, nearest approach, Show, radius and CSV', async 
   assert.match(lines[1], /^Sample: Vehicle 1 \(ISO date-times\),2024-03-14T08:1/);
 
   // Accessible
-  await page.addScriptTag({ content: AXE });
+  await page.addScriptTag({ url: '/node_modules/axe-core/axe.min.js' });
   const v = await page.evaluate(async () => (await window.axe.run('#nearby-box', { resultTypes: ['violations'] })).violations.map((x) => `${x.id}: ${x.nodes.length}`));
   assert.deepEqual(v, []);
 

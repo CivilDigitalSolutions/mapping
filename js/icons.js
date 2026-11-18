@@ -33,6 +33,9 @@ export function contrastText(hex) {
  */
 export function markerSvg({ shape = 'circle', color = '#0072B2', size = 28, label = '' } = {}) {
   const def = SHAPES[shape] || SHAPES.circle;
+  // This markup goes into the page, so only plain colours and sizes are allowed through
+  if (!/^#[0-9a-f]{3,8}$/i.test(String(color))) color = '#0072B2';
+  size = Number.isFinite(Number(size)) ? Number(size) : 28;
   const fill = `fill="${color}"`;
   const stroke = 'stroke="#fff" stroke-width="2.25"';
   let text = '';
@@ -54,6 +57,8 @@ export function anchorFor(shape, size) {
 
 /** Arrow marker used to show direction of travel along a line. */
 export function arrowSvg(color, angleDeg) {
+  if (!/^#[0-9a-f]{3,8}$/i.test(String(color))) color = '#0072B2';
+  angleDeg = Number(angleDeg) || 0;
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false" style="transform:rotate(${angleDeg}deg)"><path d="M8 2 L14 13 L8 10 L2 13 Z" fill="${color}" stroke="#fff" stroke-width="1.25" stroke-linejoin="round"/></svg>`;
 }
 
@@ -100,7 +105,16 @@ export function spriteFor(shape, color, size, dpr = 1) {
       entry.ready = true;
       resolve(entry);
     };
-    img.onerror = () => resolve(entry);
+    img.onerror = () => {
+      // Draw a plain dot instead, so the map never waits for an image that can't load
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#0072B2';
+      ctx.beginPath();
+      ctx.arc((SPRITE_MARGIN + size / 2) * dpr, (SPRITE_MARGIN + size / 2) * dpr, (size / 3) * dpr, 0, Math.PI * 2);
+      ctx.fill();
+      entry.ready = true;
+      resolve(entry);
+    };
     const svg = markerSvg({ shape, color, size: size * dpr }).replace(/style="[^"]*"/, '');
     img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
   });

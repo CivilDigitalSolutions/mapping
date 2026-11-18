@@ -22,8 +22,15 @@ export function saveProjectFile() {
 /** Load a project file's text. Asks whether to add to or replace what's already loaded. */
 export async function openProjectText(text, fileName = 'project file') {
   let project;
+  let json;
   try {
-    project = readProject(JSON.parse(text), defaultStyle);
+    json = JSON.parse(text);
+  } catch {
+    toast(`Couldn't open ${fileName}: the file is damaged or isn't a Data Mapper project file.`, 'error');
+    return;
+  }
+  try {
+    project = readProject(json, defaultStyle);
   } catch (err) {
     toast(`Couldn't open ${fileName}: ${err.message}.`, 'error');
     return;

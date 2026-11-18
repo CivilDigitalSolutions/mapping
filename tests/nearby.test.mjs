@@ -70,3 +70,10 @@ test('points without times, and a single point', () => {
   assert.equal(one.visits.length, 1);
   assert.equal(one.visits[0].from, min(3));
 });
+
+test('across the date line, places either side are close together', () => {
+  const pts = [{ lat: -17, lon: 179.9995, t: 0 }, { lat: -17, lon: -179.9995, t: 60000 }];
+  const r = visitsNear(pts, [0, 1], { lat: -17, lon: 180 }, 100);
+  assert.equal(r.visits.length, 1, 'about 53 m either side of 180°');
+  assert.ok(r.nearest.dist < 1);
+});

@@ -10,7 +10,9 @@ const RAD = Math.PI / 180;
 /** Flat x/y in metres around a centre: accurate to well under 1% within tens of km. */
 function projector(lat0, lon0) {
   const cos = Math.cos(lat0 * RAD);
-  return (lat, lon) => [(lon - lon0) * RAD * R * cos, (lat - lat0) * RAD * R];
+  // Longitude difference the short way round, so places either side of the date line are close
+  const dLon = (lon) => ((((lon - lon0) % 360) + 540) % 360) - 180;
+  return (lat, lon) => [dLon(lon) * RAD * R * cos, (lat - lat0) * RAD * R];
 }
 
 /**

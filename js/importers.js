@@ -61,7 +61,7 @@ const NAME_PATTERNS = {
   lat: /^(lat|latitude|lat_?dd|lat_?deg|gps_?lat(itude)?|y_?coord|y|northing_?deg|decimallatitude)$/i,
   lon: /^(lon|lng|long|longitude|lon_?dd|lng_?dd|long_?deg|gps_?lon(g|gitude)?|x_?coord|x|decimallongitude)$/i,
   coords: /(coord|coordinates|location|position|lat_?lo?ng?|lat\/lo?ng?|latlon|point|geom|wkt|gps|lat\s*,\s*lo?ng?)/i,
-  datetime: /^(date_?time|datetime|timestamp|time_?stamp|date ?& ?time|recorded(_?at)?|created(_?at)?|utc|time_?utc|date_?utc|fix_?time|event_?time|observed(_?at)?|when)$/i,
+  datetime: /^(date_?time|datetime|timestamp|time_?stamp|date ?& ?time|recorded(_?at)?|created(_?at)?|utc|time_?utc|date_?utc|fix_?time|event_?time|observed(_?at)?|when|ts|epoch|unix(_?(time|ts|timestamp))?|epoch_?(time|s|ms)?|posix_?time)$/i,
   date: /(^|_|\s)(date|day)($|_|\s)|^date/i,
   time: /(^|_|\s)(time|hour)($|_|\s)|^time/i,
   label: /^(name|label|title|id|waypoint|site|description|desc|point_?name|ref|reference|callsign|vehicle|device)$/i,

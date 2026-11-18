@@ -32,7 +32,7 @@ export let exportRun = null; // { kind, controller } while an export is running
 
 export function exportKind() { return $('[name="exportkind"]:checked').value; }
 
-export function canVideo() { return replay.hasTimedData() && !!videoSupport(); }
+export function canVideo() { return replay.hasTimeSpan() && !!videoSupport(); }
 
 export function syncExportKind() {
   const kind = exportKind();
@@ -62,8 +62,8 @@ export function openExport(kind = 'pdf') {
   const support = videoSupport();
   $('#video-desc').textContent = !support
     ? "This browser can't record video. Try a recent version of Chrome, Edge, Firefox or Safari."
-    : !replay.hasTimedData()
-      ? 'Needs data with dates and times.'
+    : !replay.hasTimeSpan()
+      ? 'Needs visible data with at least two different dates or times.'
       : `The routes moving over time, with the date and time on screen. Saved as ${support.ext.toUpperCase()}.`;
   $('#video-speed-hint').textContent = support?.fast
     ? 'Videos are made faster than they play, usually in a fraction of their length. Keep this tab open until it finishes.'

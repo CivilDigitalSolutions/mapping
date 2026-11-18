@@ -192,3 +192,22 @@ export function bearing(a, b) {
     Math.sin(toRad(a[0])) * Math.cos(toRad(b[0])) * Math.cos(toRad(b[1] - a[1]));
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
+
+/**
+ * A longitude moved by whole turns (±360°) so it's within 180° of `prev`.
+ * Lines joined this way cross the date line the short way, instead of being
+ * drawn right round the world (the map understands longitudes beyond ±180).
+ */
+export function unwrapLon(prev, lon) {
+  let x = lon;
+  while (x - prev > 180) x -= 360;
+  while (x - prev < -180) x += 360;
+  return x;
+}
+
+/** [lat, lon] pairs along a route, unwrapped across the date line (see unwrapLon). */
+export function unwrapRoute(latlngs) {
+  const out = [];
+  for (const [lat, lon] of latlngs) out.push([lat, out.length ? unwrapLon(out[out.length - 1][1], lon) : lon]);
+  return out;
+}
