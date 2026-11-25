@@ -41,8 +41,9 @@ body { font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 .v-marker { background: none; border: none; }
 .v-pop h3 { margin: 0; font-size: 1rem; }
 .v-pop .v-sub { margin: .1rem 0 .4rem; color: #5a6877; font-size: .82rem; }
-.v-pop dl { display: grid; grid-template-columns: auto 1fr; gap: .15rem .6rem; margin: 0; font-size: .85rem; }
-.v-pop dt { color: #5a6877; }
+/* Name column capped at ~45% so a long column header can't crush the values (see app.css .pop-dl). */
+.v-pop dl { display: grid; grid-template-columns: fit-content(45%) minmax(0, 1fr); gap: .15rem .6rem; margin: 0; font-size: .85rem; }
+.v-pop dt { color: #5a6877; overflow-wrap: anywhere; }
 .v-pop dd { margin: 0; overflow-wrap: anywhere; }
 .v-mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; }
 .v-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
