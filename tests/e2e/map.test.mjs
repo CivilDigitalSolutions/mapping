@@ -38,6 +38,26 @@ test('clicking a marker opens its details; Previous / Next step through the rout
   await page.waitForFunction(() => /2 of 10/.test(document.querySelector('.pop-sub')?.textContent || ''));
 });
 
+test('a very long column name in the file does not squeeze the details values into a thin column', async () => {
+  const page = await openApp(browser, server);
+  const long = 'Originating cell site sector address description (calculated from the network provider records)';
+  const csv = `Latitude,Longitude,Timestamp,Day,${long}\n51.5,-0.12,2024-03-14T08:00:00Z,Thursday,12 Example Road\n51.501,-0.121,2024-03-14T08:05:00Z,Thursday,14 Example Road\n`;
+  await chooseFile(page, writeTemp('long-header.csv', csv));
+  await finishImport(page, 1);
+  await page.waitForSelector('.dm-focus');
+  const [x, y] = await centreOf(page.locator('.dm-focus').first());
+  await page.mouse.click(x, y);
+  await page.waitForSelector('.pop-dl');
+  const widths = await page.locator('.pop-dl').evaluate((dl) => ({
+    dl: dl.clientWidth,
+    dd: [...dl.querySelectorAll('dd')].map((d) => d.getBoundingClientRect().width),
+  }));
+  // Every value keeps at least about half the popup's width (it used to drop to a letter or two)
+  for (const w of widths.dd) assert.ok(w >= widths.dl * 0.45, `value column only ${w}px of ${widths.dl}px`);
+  assert.match(await page.locator('.pop-dl').innerText(), /Thursday/);
+  assert.deepEqual(page.errors, []);
+});
+
 test('keyboard: Tab to a marker, Enter opens it, Escape returns to the marker', async () => {
   const page = await openApp(browser, server);
   await loadSamples(page);
