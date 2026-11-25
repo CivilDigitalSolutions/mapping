@@ -52,3 +52,16 @@ test('the service worker keeps every app file for offline use', () => {
     assert.ok(fs.existsSync(path.join(ROOT, f)), `sw.js lists ${f}, which doesn't exist`);
   }
 });
+
+test('the deployed site includes every file the service worker pre-caches', () => {
+  // If one is missing from the site, the browser refuses the new service worker and
+  // people who have used the app before keep being served their old cached copy.
+  const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
+  const listed = [...sw.matchAll(/^\s+'([^']+)',$/gm)].map((m) => m[1]).filter((f) => f !== './');
+  const wf = fs.readFileSync(path.join(ROOT, '.github/workflows/pages.yml'), 'utf8');
+  const cp = wf.match(/^\s*cp -r (.+) _site\/\s*$/m);
+  assert.ok(cp, 'could not find the "cp -r ... _site/" line in pages.yml');
+  const deployed = cp[1].trim().split(/\s+/);
+  const missing = listed.filter((f) => !deployed.some((d) => f === d || f.startsWith(`${d}/`)));
+  assert.deepEqual(missing, [], `add these to the cp line in .github/workflows/pages.yml: ${missing.join(', ')}`);
+});

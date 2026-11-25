@@ -49,7 +49,7 @@ jobs:
       - name: Collect site files
         run: |
           mkdir _site
-          cp -r index.html manifest.webmanifest sw.js css js vendor icons _site/
+          cp -r index.html manifest.webmanifest sw.js css js vendor icons viewer _site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
