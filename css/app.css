@@ -194,8 +194,10 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4p
 .pop-title:focus-visible { outline: 3px solid var(--focus); }
 .pop-icon { display: inline-flex; }
 .pop-sub { margin: .2rem 0 .6rem; color: var(--ink-2); font-size: .82rem; }
-.pop-dl { display: grid; grid-template-columns: auto 1fr; gap: .25rem .75rem; margin: 0; max-height: 220px; overflow: auto; }
-.pop-dl dt { font-weight: 600; color: var(--ink-2); font-size: .82rem; }
+/* The name column fits its text but never takes more than ~45% of the popup, so one long
+   column header in a file can't squeeze every value down to a letter per line. */
+.pop-dl { display: grid; grid-template-columns: fit-content(45%) minmax(0, 1fr); gap: .25rem .75rem; margin: 0; max-height: 220px; overflow: auto; }
+.pop-dl dt { font-weight: 600; color: var(--ink-2); font-size: .82rem; overflow-wrap: anywhere; }
 .pop-dl dd { margin: 0; overflow-wrap: anywhere; }
 .pop-nav { display: flex; justify-content: space-between; gap: .5rem; margin-top: .75rem; }
 
