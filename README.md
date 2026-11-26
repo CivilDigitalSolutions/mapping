@@ -45,7 +45,7 @@ npm start            # or: python3 -m http.server 8080
 
 ### Publishing on GitHub Pages
 
-`.github/workflows/pages.yml` runs the tests and publishes the site on every push to `main` (or the development branch). You can also run it by hand from the **Actions** tab. To turn it on, do this once:
+`.github/workflows/pages.yml` runs the tests and publishes the site on every push to `main`. You can also run it by hand from the **Actions** tab. To turn it on, do this once:
 
 1. In the repository, go to **Settings → Pages**.
 2. Under **Build and deployment → Source**, choose **GitHub Actions**.

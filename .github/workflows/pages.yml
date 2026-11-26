@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - claude/csv-data-mapping-pwa-72sg1k
   # Pull requests run the tests but are never deployed
   pull_request:
   workflow_dispatch:
