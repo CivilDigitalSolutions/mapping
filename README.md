@@ -73,7 +73,7 @@ See [docs/security-audit.md](docs/security-audit.md) for the latest audit. In sh
 
 ### Map tiles
 
-The background layers are set in `js/config.js`. They're free, but each provider has a fair-use policy. OpenStreetMap's tile servers are meant for light use. If your organisation will use the app heavily, point `BASEMAPS` at your own tile server or a provider you have an agreement with. Also add the new tile host to `img-src` in the Content-Security-Policy at the top of `index.html` (and in `js/interactive.js` for map files), or the browser will refuse to load its tiles.
+The background layers are set in `js/config.js`. They're free, but each provider has a fair-use policy. OpenStreetMap's tile servers are meant for light use. If your organisation will use the app heavily, point `BASEMAPS` at your own tile server or a provider you have an agreement with. Also add the new tile host to `img-src` in the Content-Security-Policy at the top of `index.html` (and in `js/interactive.js` for map files), or the browser will refuse to load its tiles. Saved map files show Esri's street map (`FILE_STREET_MAP`) in place of OpenStreetMap's, because OpenStreetMap blocks tile requests from files opened from disk.
 
 ## Tests
 

@@ -35,6 +35,21 @@ export const BASEMAPS = [
   },
 ];
 
+// Saved interactive map files use this street map in place of OpenStreetMap's.
+// OpenStreetMap's tile servers refuse requests that don't say which website they
+// come from (no Referer header), and a map file opened from disk or an email
+// attachment never sends one, so every tile shows "Access blocked".
+// Same id, so the file opens on the street map whenever the app was showing it.
+export const FILE_STREET_MAP = {
+  id: 'osm',
+  name: 'Street map',
+  url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+  options: {
+    maxZoom: 19,
+    attribution: 'Tiles &copy; Esri &mdash; Sources: Esri, HERE, Garmin, USGS, &copy; OpenStreetMap contributors, and the GIS User Community',
+  },
+};
+
 export const DEFAULT_VIEW = { center: [20, 0], zoom: 2 };
 
 // Visitor counting with GoatCounter (free, no cookies, no personal data).

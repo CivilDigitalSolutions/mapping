@@ -17,7 +17,9 @@ async function openFile(file, options = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-GB', timezoneId: 'America/New_York', bypassCSP: true, ...options });
   let other = 0;
   await ctx.route(/^https?:/, (r) => {
-    if (/tile\.openstreetmap\.org/.test(r.request().url())) return r.fulfill({ status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#e8eee4"/></svg>' });
+    // Map files fetch Esri tiles; anything else, including OpenStreetMap's tiles
+    // (which block files opened from disk), counts as an outside request
+    if (/server\.arcgisonline\.com/.test(r.request().url())) return r.fulfill({ status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#e8eee4"/></svg>' });
     other++;
     return r.abort();
   });

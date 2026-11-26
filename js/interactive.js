@@ -3,7 +3,7 @@
 // Leaflet, the viewer (viewer/) and the data are all inside the file; only the
 // map background is loaded from the internet when it's opened.
 
-import { BASEMAPS } from './config.js';
+import { BASEMAPS, FILE_STREET_MAP } from './config.js';
 import { binColour, getScale, NO_VALUE, RAMP_CSS } from './colour.js';
 import { displayTimeZone } from './dates.js';
 import { anchorFor, markerSvg } from './icons.js';
@@ -86,7 +86,8 @@ export async function buildInteractiveMap(datasets, opts) {
     saved: Date.now(),
     filterText: opts.filterText || '',
     basemap: opts.basemap || BASEMAPS[0].id,
-    basemaps: BASEMAPS.map((b) => ({ id: b.id, name: b.name, url: b.url, options: b.options })),
+    basemaps: BASEMAPS.map((b) => (b.id === FILE_STREET_MAP.id ? FILE_STREET_MAP : b))
+      .map((b) => ({ id: b.id, name: b.name, url: b.url, options: b.options })),
     view: opts.view || null,
     datasets: datasets.map(datasetData),
   };
