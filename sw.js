@@ -1,7 +1,7 @@
 // Service worker: makes the app installable and usable offline.
 // - App files are pre-cached (bump VERSION whenever you change them).
 // - Map tiles are cached as you browse (newest 3000 kept), so areas you've viewed still show offline.
-const VERSION = 'v21';
+const VERSION = 'v22';
 const APP_CACHE = `app-${VERSION}`;
 const TILE_CACHE = 'tiles-v1';
 const MAX_TILES = 3000;
@@ -65,7 +65,9 @@ const APP_FILES = [
 const TILE_HOSTS = ['tile.openstreetmap.org', 'tile.opentopomap.org', 'server.arcgisonline.com'];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(APP_CACHE).then((c) => c.addAll(APP_FILES)).then(() => self.skipWaiting()));
+  // cache: 'reload' so a copy the browser's own cache kept is never used for the new version
+  const fresh = APP_FILES.map((f) => new Request(f, { cache: 'reload' }));
+  event.waitUntil(caches.open(APP_CACHE).then((c) => c.addAll(fresh)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
@@ -85,6 +87,8 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(tile(req));
     return;
   }
+  // Developing on your own computer: always use the files as they are on disk, never a saved copy
+  if (url.origin === self.location.origin && (url.hostname === 'localhost' || url.hostname === '127.0.0.1') && req.mode !== 'navigate') return;
   if (url.origin === self.location.origin) {
     // Network first for the page itself so updates show up; cache first for everything else.
     if (req.mode === 'navigate') {

@@ -156,3 +156,41 @@ test('cell site settings are kept in a project file', async () => {
   assert.equal(json.datasets[0].cell.az, 'Azimuth');
   assert.equal(json.datasets[0].cell.unit, 'm');
 });
+
+test('the Add data window always offers the cell site sample, even with data on the map', async () => {
+  const page = await openApp(browser, server, { query: '?cellsites=1' });
+  await page.click('#btn-sample');
+  await page.waitForFunction(() => document.querySelectorAll('.ds-card').length === 3);
+  assert.equal(await page.locator('#btn-sample-cell').isVisible(), false, 'the empty-state button has gone with the data');
+  await page.click('#btn-add');
+  assert.equal(await page.locator('#btn-sample-cell-dlg').isVisible(), true);
+  await page.click('#btn-sample-cell-dlg');
+  await page.waitForFunction(() => document.querySelectorAll('.ds-card').length === 4);
+  await settle(page);
+  assert.equal(await page.locator('#dlg-import').evaluate((d) => d.open), false, 'the window closes');
+  assert.equal(await sectors(page), 22);
+  assert.deepEqual(page.errors, []);
+});
+
+test('the Add data window shows no cell site sample unless the feature is on', async () => {
+  const page = await openApp(browser, server);
+  await page.click('#btn-add');
+  assert.equal(await page.locator('#btn-sample-cell-dlg').isVisible(), false);
+});
+
+test('the app and cell sites work with the service worker running', async () => {
+  const page = await openApp(browser, server, { query: '?cellsites=1', serviceWorkers: 'allow' });
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.reload();
+  // The worker must not answer requests for the app's own scripts while developing on localhost
+  const served = await page.evaluate(async () => {
+    const res = await fetch('/js/capture.js', { cache: 'no-store' });
+    return { ok: res.ok, controlled: !!navigator.serviceWorker.controller };
+  });
+  assert.equal(served.ok, true);
+  await page.evaluate(async () => { const f = await import('/js/import-flow.js'); f.loadCellSample(); });
+  await page.waitForSelector('.ds-card');
+  await settle(page);
+  assert.equal(await sectors(page), 22);
+  assert.deepEqual(page.errors, []);
+});

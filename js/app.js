@@ -39,6 +39,9 @@ if (FEATURES.cellSites) {
   $('#btn-sample-cell').hidden = false;
   $('#btn-sample-cell-csv').hidden = false;
   $('#btn-sample-cell').addEventListener('click', loadCellSample);
+  // Also in the Add data window, which is there whether or not there is data on the map
+  $('#cell-sample-row').hidden = false;
+  $('#btn-sample-cell-dlg').addEventListener('click', () => { $('#dlg-import').close(); loadCellSample(); });
   $('#btn-sample-cell-csv').addEventListener('click', () => download('sample-cell-sites.csv', CELL_SAMPLE.text, 'text/csv'));
 }
 $('#btn-sample-csv').addEventListener('click', () => download('sample-track.csv', SAMPLES[0].text, 'text/csv'));
