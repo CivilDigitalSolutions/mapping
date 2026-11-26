@@ -3,6 +3,7 @@
 // Leaflet, the viewer (viewer/) and the data are all inside the file; only the
 // map background is loaded from the internet when it's opened.
 
+import { MAX_SECTORS, cellActive, cellSectors, sectorOutline, sectorsExtent } from './cellsites.js';
 import { BASEMAPS, FILE_STREET_MAP } from './config.js';
 import { binColour, getScale, NO_VALUE, RAMP_CSS } from './colour.js';
 import { displayTimeZone } from './dates.js';
@@ -49,6 +50,19 @@ function datasetData(ds) {
     icons[c] = [markerSvg({ shape: st.shape, color: c, size: st.size })];
     for (let n = 1; n <= digits; n++) icons[c][n] = markerSvg({ shape: st.shape, color: c, size: st.size, label: '0'.repeat(n) });
   }
+  // Cell sectors go into the file as ready-made outlines, so the viewer draws exactly what the app does
+  let cell = null;
+  if (cellActive(ds)) {
+    const { sectors } = cellSectors(ds, mask);
+    const shown = sectors.slice(0, MAX_SECTORS);
+    const r5 = (n) => +n.toFixed(5);
+    cell = {
+      count: shown.length,
+      capped: sectors.length > shown.length,
+      bounds: sectorsExtent(shown),
+      shapes: shown.map((s) => [newIndex.get(s.i), sectorOutline(s.lat, s.lon, s.az, s.beam, s.radius).map(([la, lo]) => [r5(la), r5(lo)])]),
+    };
+  }
   return {
     name: ds.name,
     color: st.color,
@@ -67,6 +81,7 @@ function datasetData(ds) {
     order,
     untimed,
     track,
+    cell,
     range: track.length ? [pts[track[0]][2], pts[track[track.length - 1]][2]] : null,
   };
 }

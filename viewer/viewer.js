@@ -23,6 +23,7 @@
   L.control.scale({ imperial: true, metric: true }).addTo(map);
 
   const canvas = L.canvas({ padding: 0.3 });
+  map.createPane('dmSectors').style.zIndex = 405; // cell site sectors sit under the lines and markers
   map.createPane('dmLines').style.zIndex = 410;
 
   const iconCache = new Map();
@@ -101,11 +102,34 @@
     ds.group = group;
     ds.visible = true;
     group.addTo(map);
+
+    // Cell site sectors have a group of their own, so they stay on the map while their dataset is replayed
+    if (ds.cell) {
+      const sectors = L.featureGroup();
+      const base = { pane: 'dmSectors', className: 'v-sector', color: ds.color, weight: 1.5, opacity: 0.9, fillColor: ds.color, fillOpacity: 0.22, bubblingMouseEvents: false };
+      ds.cell.shapes.forEach(([i, ring]) => {
+        const poly = L.polygon(ring, base);
+        poly.on('mouseover', () => poly.setStyle({ fillOpacity: 0.45, weight: 2.5 }));
+        poly.on('mouseout', () => poly.setStyle(base));
+        poly.on('click', () => L.popup({ maxWidth: 320 }).setLatLng(ll(i)).setContent(popupHtml(ds, i)).openOn(map));
+        poly.addTo(sectors);
+      });
+      ds.sectors = sectors;
+      sectors.addTo(map);
+    }
   });
+
+  const showSectors = (ds, on) => { if (ds.sectors) { if (on) ds.sectors.addTo(map); else map.removeLayer(ds.sectors); } };
+  /** The corners of the area a dataset covers, including its cell sectors. */
+  function extend(b, ds) {
+    ds.pts.forEach((p) => b.extend([p[0], p[1]]));
+    if (ds.cell && ds.cell.bounds) { b.extend(ds.cell.bounds[0]); b.extend(ds.cell.bounds[1]); }
+    return b;
+  }
 
   function fitAll() {
     const b = L.latLngBounds([]);
-    D.datasets.forEach((ds) => { if (ds.visible) ds.pts.forEach((p) => b.extend([p[0], p[1]])); });
+    D.datasets.forEach((ds) => { if (ds.visible) extend(b, ds); });
     if (b.isValid()) map.fitBounds(b, { padding: [40, 40], maxZoom: 16 });
   }
   if (D.view) map.setView(D.view.center, D.view.zoom); else fitAll();
@@ -127,7 +151,7 @@
     const scale = ds.scale ? `<div class="v-scale"><span class="v-scale-title">${esc(ds.scale.title)}</span><span class="v-scale-bar" style="background:${ds.scale.css}"></span><span class="v-scale-ends"><span>${esc(ds.scale.min)}</span><span>${esc(ds.scale.max)}</span></span></div>` : '';
     return `<li class="v-ds">
       <label class="v-ds-row"><input type="checkbox" checked data-ds="${k}"><span class="v-ds-icon" aria-hidden="true">${icon.replace(/width="\d+" height="\d+"/, 'width="20" height="20"')}</span><span class="v-ds-name">${esc(ds.name)}</span></label>
-      <div class="v-ds-meta">${ds.pts.length.toLocaleString()} point${ds.pts.length === 1 ? '' : 's'}${ds.range ? ` · ${esc(fmtTime(ds.range[0]))} – ${esc(fmtTime(ds.range[1]))}` : ''}</div>
+      <div class="v-ds-meta">${ds.pts.length.toLocaleString()} point${ds.pts.length === 1 ? '' : 's'}${ds.cell ? ` · ${ds.cell.count.toLocaleString()} cell sector${ds.cell.count === 1 ? '' : 's'}` : ''}${ds.range ? ` · ${esc(fmtTime(ds.range[0]))} – ${esc(fmtTime(ds.range[1]))}` : ''}</div>
       ${scale}
       <div class="v-ds-actions"><button type="button" class="v-btn v-btn-sm" data-zoom="${k}">Zoom to</button><button type="button" class="v-btn v-btn-sm" data-table="${k}">Table</button></div>
     </li>`;
@@ -136,13 +160,14 @@
     const ds = D.datasets[Number(e.target.dataset.ds)];
     if (!ds) return;
     ds.visible = e.target.checked;
+    showSectors(ds, ds.visible);
     if (replayOn && timed.includes(ds)) drawReplay(); else if (ds.visible) ds.group.addTo(map); else map.removeLayer(ds.group);
   });
   $('#v-list').addEventListener('click', (e) => {
     const z = e.target.closest('[data-zoom]');
     if (z) {
       const ds = D.datasets[Number(z.dataset.zoom)];
-      const b = L.latLngBounds(ds.pts.map((p) => [p[0], p[1]]));
+      const b = extend(L.latLngBounds([]), ds);
       if (b.isValid()) map.fitBounds(b, { padding: [40, 40], maxZoom: 16 });
       closePanelOnSmall();
     }
@@ -179,7 +204,7 @@
       const i = Number(b.dataset.show);
       dlg.close();
       if (replayOn) stopReplay();
-      if (!ds.visible) { ds.visible = true; $(`[data-ds="${ds.k}"]`).checked = true; ds.group.addTo(map); }
+      if (!ds.visible) { ds.visible = true; $(`[data-ds="${ds.k}"]`).checked = true; ds.group.addTo(map); showSectors(ds, true); }
       const p = ds.pts[i];
       map.setView([p[0], p[1]], Math.max(map.getZoom(), 15));
       L.popup({ maxWidth: 320 }).setLatLng([p[0], p[1]]).setContent(popupHtml(ds, i)).openOn(map);

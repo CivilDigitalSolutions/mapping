@@ -11,6 +11,7 @@ import {
   drawTiles, drawOverlays, drawLegend, drawTitleClock, drawProgress, drawAttribution, markerPng,
   drawScaleBar, drawNorthArrow, drawBranding, loadImage,
 } from './capture.js';
+import { cellActive, cellSectors, cellSummary, sectorsExtent } from './cellsites.js';
 import { formatDateTime, formatDuration, formatDistance, displayTimeZone } from './dates.js';
 import { distanceMetres } from './coords.js';
 import { pdfLogoSize } from './branding-ui.js';
@@ -20,7 +21,12 @@ const CRS = L.CRS.EPSG3857;
 
 function boundsOf(datasets) {
   const b = L.latLngBounds([]);
-  datasets.forEach((d) => d.points.forEach((p) => b.extend([p.lat, p.lon])));
+  datasets.forEach((d) => {
+    d.points.forEach((p) => b.extend([p.lat, p.lon]));
+    // Frame the whole of each cell sector, not just the masts
+    const extent = cellActive(d) ? sectorsExtent(cellSectors(d).sectors) : null;
+    if (extent) { b.extend(extent[0]); b.extend(extent[1]); }
+  });
   return b;
 }
 
@@ -478,6 +484,40 @@ export async function buildPdf({ map, replay, datasets, sequenceOf, opts, onProg
   doc.text(pdfText(`All times are shown in ${displayTimeZone().replace(/_/g, ' ')} time. Route distance is measured in a straight line between consecutive points, in the order the points are joined on the map.`), M, y);
   y += 8;
 
+  // ---- Cell sites (only when a dataset is drawn as cell sectors)
+  const cellData = datasets.filter(cellActive);
+  if (cellData.length) {
+    const deg = (r) => (r ? (r[0] === r[1] ? `${round1(r[0])}°` : `${round1(r[0])}° to ${round1(r[1])}°`) : '-');
+    const dist = (r) => (r ? (r[0] === r[1] ? formatDistance(r[0]) : `${formatDistance(r[0])} to ${formatDistance(r[1])}`) : '-');
+    const cellRows = cellData.map((d) => {
+      const c = cellSummary(d);
+      return [pdfText(d.name), `${c.count.toLocaleString()}${c.total > c.count ? ` of ${c.total.toLocaleString()}` : ''}`, c.missing ? c.missing.toLocaleString() : '-', deg(c.beam), dist(c.radius)];
+    });
+    if (y > pageH - 55) { doc.addPage(); y = M + 5; }
+    doc.setTextColor(...ink);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text('Cell sites', M, y + 2);
+    doc.autoTable({
+      startY: y + 5,
+      margin: { left: M, right: M, top: M },
+      head: [['Dataset', 'Sectors drawn', 'Rows with no azimuth', 'Beamwidth', 'Radius']],
+      body: cellRows,
+      styles: { font: 'helvetica', fontSize: 9, cellPadding: 2, textColor: ink },
+      headStyles: { fillColor: brand, textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [244, 247, 250] },
+      columnStyles: { 0: { cellWidth: 70 } },
+      showHead: 'everyPage',
+    });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...grey);
+    y = doc.lastAutoTable.finalY + 5;
+    const note = doc.splitTextToSize(pdfText('Each sector on the map starts at the mast and is centred on its azimuth (the direction the antenna faces, in degrees clockwise from north). Its width is the beamwidth and its length is the radius. Rows with no beamwidth or radius use the defaults chosen when the data was added.'), pageW - 2 * M);
+    doc.text(note, M, y);
+    y += note.length * 4 + 6;
+  }
+
   if (opts.notes && opts.notes.trim()) {
     doc.setTextColor(...ink);
     doc.setFont('helvetica', 'bold');
@@ -584,6 +624,8 @@ export async function buildPdf({ map, replay, datasets, sequenceOf, opts, onProg
   onProgress?.(1, 'Done');
   return doc.output('blob');
 }
+
+const round1 = (n) => Math.round(n * 10) / 10;
 
 /** "3 stops · 1 gap · 2 jumps" for the summary table. */
 function eventCounts(rows) {

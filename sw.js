@@ -40,6 +40,7 @@ const APP_FILES = [
   'js/replay.js',
   'js/samples.js',
   'js/scalebar.js',
+  'js/sectorlayer.js',
   'js/settings.js',
   'js/state.js',
   'js/store.js',

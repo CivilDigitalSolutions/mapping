@@ -7,6 +7,8 @@
 // sector is 60–70°; 360° means an all-round antenna). The radius is how far
 // the signal is meant to reach.
 
+import { FEATURES } from './config.js';
+
 export const UNIT_METRES = { m: 1, km: 1000, mi: 1609.344 };
 
 export const UNIT_LABELS = { m: 'metres', km: 'kilometres', mi: 'miles' };
@@ -149,6 +151,30 @@ export function sectorOutline(lat, lon, az, beam, radius, stepDeg = 4) {
   const pts = [[lat, lon]];
   for (let k = 0; k <= steps; k++) pts.push(destination(lat, lon, start + (beam * k) / steps, radius));
   return pts;
+}
+
+/** True if this dataset's cell sectors should be drawn: the preview is on and the dataset has been set up for it. */
+export function cellActive(ds) {
+  return FEATURES.cellSites && !!ds.cell?.on && !!ds.cell.az;
+}
+
+/** The corners [[south, west], [north, east]] of the area the sectors cover, or null if there are none. */
+export function sectorsExtent(sectors) {
+  let s = Infinity, w = Infinity, n = -Infinity, e = -Infinity;
+  for (const sec of sectors.slice(0, MAX_SECTORS)) {
+    for (const [la, lo] of sectorOutline(sec.lat, sec.lon, sec.az, sec.beam, sec.radius, 15)) {
+      if (la < s) s = la; if (la > n) n = la;
+      if (lo < w) w = lo; if (lo > e) e = lo;
+    }
+  }
+  return Number.isFinite(s) ? [[s, w], [n, e]] : null;
+}
+
+/** For reports: how many sectors, and the range of beamwidths (degrees) and radii (metres) among them. */
+export function cellSummary(ds) {
+  const { sectors, missing } = cellSectors(ds);
+  const range = (key) => (sectors.length ? [Math.min(...sectors.map((x) => x[key])), Math.max(...sectors.map((x) => x[key]))] : null);
+  return { count: Math.min(sectors.length, MAX_SECTORS), total: sectors.length, missing, beam: range('beam'), radius: range('radius') };
 }
 
 // ---------------------------------------------------------------- saved settings

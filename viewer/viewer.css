@@ -70,3 +70,6 @@ dialog.v-dlg::backdrop { background: rgba(10,20,30,.5); }
   #v-panel .v-close { display: inline-flex; align-self: flex-end; }
 }
 @media (prefers-reduced-motion: reduce) { #v-panel { transition: none; } }
+
+/* Cell site sectors */
+.v-sector { cursor: pointer; transition: fill-opacity .1s; }

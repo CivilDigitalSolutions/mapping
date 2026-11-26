@@ -43,7 +43,11 @@ It is a preview feature and is **off for everyone by default**, so nothing chang
 - **Afterwards:** a dataset's **Style** dialog has the same controls, so existing data can be switched on or off later.
 - **Sample:** *Try cell site sample* in the Datasets panel, or *Download cell site sample CSV* under Help. It is separate from the ordinary sample data.
 - **Going live:** set `FEATURE_DEFAULTS.cellSites` to `true` in `js/config.js`.
-- Not yet included: sectors are not drawn in the PDF, video or interactive map exports.
+- **Exports:** sectors are included in all three.
+  - *PDF report:* drawn on the map page (which is framed to fit whole sectors), with a sector shape in the legend and a **Cell sites** table on the summary page (sectors drawn, rows with no azimuth, beamwidth and radius ranges).
+  - *Video:* drawn under the moving routes in every frame, including when the cell site data is itself the dataset being replayed. A video still needs some data with dates and times, so cell site data on its own can't make one.
+  - *Interactive map file:* the sector outlines are saved inside the file. The viewer lists the sector count, shows/hides them with their dataset, and clicking one opens that antenna's details.
+  - Only datasets switched on as cell sites are included, and nothing is added when the preview is off.
 
 ## Running it
 

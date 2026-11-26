@@ -7,6 +7,7 @@
 // camera. Moving or zooming the visible map while exporting therefore has no
 // effect on the output, and the camera can move on its own to follow a route.
 
+import { cellActive } from './cellsites.js';
 import { markerSvg } from './icons.js';
 import { PointLayer } from './pointlayer.js';
 import { getScale, RAMP_STOPS } from './colour.js';
@@ -194,9 +195,10 @@ function scaledSvg(html, scale) {
  */
 export async function drawOverlays(ctx, map, cam) {
   const scale = cam.scale;
-  const lines = [], arrows = [], markers = [], heads = [], pointLayers = [], events = [];
+  const lines = [], polygons = [], arrows = [], markers = [], heads = [], pointLayers = [], events = [];
   map.eachLayer((l) => {
     if (l instanceof PointLayer) pointLayers.push(l);
+    else if (l instanceof L.Polygon) polygons.push(l); // (a Polygon is also a Polyline, so it must be checked first)
     else if (l instanceof L.Polyline) lines.push(l);
     else if (l instanceof L.Marker && l.options.icon instanceof L.DivIcon) {
       const cls = l.options.icon.options.className || '';
@@ -208,6 +210,29 @@ export async function drawOverlays(ctx, map, cam) {
   });
   const pad = 60 * scale;
   const inView = (p) => p.x > -pad && p.y > -pad && p.x < cam.W * scale + pad && p.y < cam.H * scale + pad;
+
+  // Cell site sectors: filled shapes, underneath everything else
+  for (const poly of polygons) {
+    const o = poly.dmStyle || poly.options; // dmStyle is the resting look, whatever the mouse is doing
+    const ring = poly.getLatLngs().flat(1);
+    if (ring.length < 3) continue;
+    const pts = ring.map((ll) => cam.toPoint(ll));
+    const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+    if (Math.max(...xs) < 0 || Math.min(...xs) > cam.W * scale || Math.max(...ys) < 0 || Math.min(...ys) > cam.H * scale) continue; // wholly off the picture
+    ctx.save();
+    ctx.beginPath();
+    pts.forEach((p, i) => { if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
+    ctx.closePath();
+    ctx.globalAlpha = o.fillOpacity ?? 0.2;
+    ctx.fillStyle = o.fillColor || o.color;
+    ctx.fill();
+    ctx.globalAlpha = o.opacity ?? 1;
+    ctx.strokeStyle = o.color;
+    ctx.lineWidth = (o.weight ?? 1.5) * scale;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+    ctx.restore();
+  }
 
   // Lines
   for (const line of lines) {
@@ -334,7 +359,9 @@ export async function drawLegend(ctx, datasets, u, { x = 16, bottom = 36, maxRow
   const names = shown.map((d) => truncate(ctx, d.name, 320 * u));
   const scales = shown.map((d) => { const sc = getScale(d); return sc && Number.isFinite(sc.min) ? sc : null; });
   const barW = 220 * u;
-  const w = Math.max(...names.map((n) => ctx.measureText(n).width), scales.some(Boolean) ? barW : 0) + pad * 2 + 28 * u;
+  // A dataset drawn as cell sectors gets a small sector shape next to its marker, so the text starts further along
+  const offs = shown.map((d) => (cellActive(d) ? 52 : 26) * u);
+  const w = Math.max(...names.map((n, i) => ctx.measureText(n).width + offs[i]), scales.some(Boolean) ? barW + 26 * u : 0) + pad * 2 + 2 * u;
   const h = shown.reduce((sum, _, i) => sum + rowH + (scales[i] ? scaleH : 0), 0) + (more ? rowH : 0) + pad * 1.2;
   const left = x * u, top = ctx.canvas.height - bottom * u - h;
   ctx.fillStyle = 'rgba(255,255,255,.93)';
@@ -349,10 +376,11 @@ export async function drawLegend(ctx, datasets, u, { x = 16, bottom = 36, maxRow
     const cy = y + rowH / 2;
     const img = await svgImage(markerSvg({ shape: d.style.shape, color: d.style.color, size: icon * u }));
     if (img) ctx.drawImage(img, left + pad, cy - (icon * u) / 2, icon * u, icon * u);
+    if (cellActive(d)) drawSectorSwatch(ctx, left + pad + 34 * u, cy, 10 * u, d.style.color);
     ctx.font = `600 ${13 * u}px ${FONT}`;
     ctx.fillStyle = '#16202b';
     ctx.textBaseline = 'middle';
-    ctx.fillText(names[i], left + pad + 26 * u, cy);
+    ctx.fillText(names[i], left + pad + offs[i], cy);
     y += rowH;
     const sc = scales[i];
     if (sc) {
@@ -385,6 +413,23 @@ export async function drawLegend(ctx, datasets, u, { x = 16, bottom = 36, maxRow
   }
   ctx.restore();
   return h;
+}
+
+/** A small wedge, the legend's picture of a cell sector. (cx, cy) is the middle of its height. */
+function drawSectorSwatch(ctx, cx, cy, r, color) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + r * 0.8);
+  ctx.arc(cx, cy + r * 0.8, r * 1.6, (-90 - 32) * (Math.PI / 180), (-90 + 32) * (Math.PI / 180));
+  ctx.closePath();
+  ctx.globalAlpha = 0.3;
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.globalAlpha = 0.95;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(1, r * 0.14);
+  ctx.stroke();
+  ctx.restore();
 }
 
 /** Title and clock panel in the top-left corner (video). */

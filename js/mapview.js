@@ -4,12 +4,13 @@
 // zooming to data, and adding a dataset to the map.
 
 import { binColour, colourKey, computeColours, getScale, setScale } from './colour.js';
-import { cellSectors, MAX_SECTORS, sectorOutline } from './cellsites.js';
-import { BASEMAPS, DEFAULT_VIEW, FEATURES } from './config.js';
+import { cellActive, cellSectors, sectorsExtent } from './cellsites.js';
+import { BASEMAPS, DEFAULT_VIEW } from './config.js';
 import { bearing, distanceMetres, formatCoord, unwrapRoute } from './coords.js';
 import { displayTimeZone, formatDateTime, formatDistance, formatDuration } from './dates.js';
 import { anchorFor, arrowSvg, eventIcon, markerSvg } from './icons.js';
 import { PointLayer, popupOffset } from './pointlayer.js';
+import { addSectors } from './sectorlayer.js';
 import { createReplay } from './replay.js';
 import * as store from './store.js';
 import { changed, datasets, hooks, layers, prefs, save, savePrefs, sequenceOf } from './state.js';
@@ -142,31 +143,10 @@ function drawDataset(ds) {
   const analysis = timedOrder.length > 1 ? analyse(ds.points, timedOrder, prefs.analysis) : null;
   const eventMarkers = analysis && prefs.analysis.showOnMap ? drawEvents(ds, analysis, group) : [];
 
-  const cell = FEATURES.cellSites && ds.cell?.on ? drawSectors(ds, group, mask) : null;
+  const cell = cellActive(ds) ? addSectors(ds, group, mask, (i) => openPointPopup(ds, i)) : null;
 
   layers.set(ds.id, { group, points, order, untimed, mask, analysis, eventMarkers, cell });
   if (ds.visible && !replay.active) group.addTo(map);
-}
-
-// ===================================================================== cell site sectors
-
-// SVG (not canvas) so a sector only catches clicks where it is drawn, and never blocks the lines above it
-const sectorRenderer = L.svg({ pane: 'dmSectors', padding: 0.5 });
-
-/** Draw a wedge for each cell site row that has an azimuth. Returns { count, missing, capped }. */
-function drawSectors(ds, group, mask) {
-  const { sectors, missing } = cellSectors(ds, mask);
-  const shown = sectors.slice(0, MAX_SECTORS);
-  const colour = ds.style.color;
-  for (const s of shown) {
-    const base = { pane: 'dmSectors', renderer: sectorRenderer, className: 'dm-sector', color: colour, weight: 1.5, opacity: 0.9, fillColor: colour, fillOpacity: 0.22 };
-    const poly = L.polygon(sectorOutline(s.lat, s.lon, s.az, s.beam, s.radius), { ...base, bubblingMouseEvents: false });
-    poly.on('mouseover', () => poly.setStyle({ fillOpacity: 0.45, weight: 2.5 }));
-    poly.on('mouseout', () => poly.setStyle(base));
-    poly.on('click', () => openPointPopup(ds, s.i));
-    poly.addTo(group);
-  }
-  return { count: shown.length, missing, capped: sectors.length > shown.length };
 }
 
 /** Redraw every dataset (after the filter or the stop / jump settings change). */
@@ -494,6 +474,9 @@ document.addEventListener('keydown', (e) => {
 export function shownBounds(ds, bounds = L.latLngBounds([])) {
   const mask = layers.get(ds.id)?.mask;
   ds.points.forEach((p, i) => { if (!mask || mask[i]) bounds.extend([p.lat, p.lon]); });
+  // Zoom out far enough to see the whole of each cell sector, not just the masts
+  const extent = cellActive(ds) ? sectorsExtent(cellSectors(ds, mask).sectors) : null;
+  if (extent) { bounds.extend(extent[0]); bounds.extend(extent[1]); }
   return bounds;
 }
 

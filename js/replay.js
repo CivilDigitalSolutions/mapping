@@ -9,7 +9,9 @@
 import { markerSvg, anchorFor, textLabel } from './icons.js';
 import { formatDateTime, formatDuration } from './dates.js';
 import { getScale, binColour } from './colour.js';
+import { cellActive } from './cellsites.js';
 import { unwrapLon } from './coords.js';
+import { addSectors } from './sectorlayer.js';
 
 const SLIDER_STEPS = 1000;
 
@@ -112,6 +114,8 @@ export function createReplay({ map, getDatasets, layers, announce }) {
     state.tracks = tracks.map((tr) => {
       const st = tr.ds.style;
       const group = L.layerGroup().addTo(map);
+      // A dataset that is replayed is hidden as a whole, so its cell sectors are kept on the map here
+      if (cellActive(tr.ds)) addSectors(tr.ds, group, layers.get(tr.ds.id)?.mask);
       const dash = st.lineStyle === 'dashed' ? '10 8' : st.lineStyle === 'dotted' ? '2 7' : null;
       const casing = L.polyline([], { renderer: lineRenderer, color: '#fff', weight: 7, opacity: 0.8, interactive: false, lineCap: 'round', lineJoin: 'round' }).addTo(group);
       const line = L.polyline([], { renderer: lineRenderer, color: st.color, weight: 4, opacity: 1, dashArray: dash, interactive: false, lineCap: 'round', lineJoin: 'round' }).addTo(group);
