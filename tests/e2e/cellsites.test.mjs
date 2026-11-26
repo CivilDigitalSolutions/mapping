@@ -13,8 +13,8 @@ const CSV = 'Site,Lat,Lon,Azimuth,Beamwidth,Radius\nA,51.50,-0.12,0,65,800\nA,51
 /** Number of sector shapes currently drawn on the map. */
 const sectors = (page) => page.locator('path.dm-sector').count();
 
-test('nothing about cell sites shows unless the feature is switched on', async () => {
-  const page = await openApp(browser, server);
+test('nothing about cell sites shows when the feature is switched off', async () => {
+  const page = await openApp(browser, server, { query: '?cellsites=0' });
   await pasteData(page, CSV);
   assert.equal(await page.locator('#imp-cell-group').isVisible(), false);
   assert.equal(await page.locator('#btn-sample-cell').isVisible(), false);
@@ -25,13 +25,26 @@ test('nothing about cell sites shows unless the feature is switched on', async (
   assert.deepEqual(page.errors, []);
 });
 
-test('the feature switch is remembered, and ?cellsites=0 switches it off', async () => {
-  const page = await openApp(browser, server, { query: '?cellsites=1' });
+test('cell sites are on for everyone, but each dataset has to be opted in', async () => {
+  const page = await openApp(browser, server); // no ?cellsites at all
   assert.equal(await page.locator('#btn-sample-cell').isVisible(), true);
-  await page.goto(server.url); // no parameter this time
-  assert.equal(await page.locator('#btn-sample-cell').isVisible(), true);
+  await pasteData(page, CSV);
+  assert.equal(await page.locator('#imp-cell-group').isVisible(), true);
+  assert.equal(await page.locator('#imp-cell-on').isChecked(), false, 'never ticked for the user');
+  await page.click('#btn-import-go');
+  await page.waitForSelector('.ds-card');
+  await settle(page);
+  assert.equal(await sectors(page), 0);
+});
+
+test('?cellsites=0 hides the feature in this browser, and ?cellsites=1 brings it back', async () => {
+  const page = await openApp(browser, server);
   await page.goto(`${server.url}?cellsites=0`);
   assert.equal(await page.locator('#btn-sample-cell').isVisible(), false);
+  await page.goto(server.url); // remembered
+  assert.equal(await page.locator('#btn-sample-cell').isVisible(), false);
+  await page.goto(`${server.url}?cellsites=1`);
+  assert.equal(await page.locator('#btn-sample-cell').isVisible(), true);
 });
 
 test('the import screen asks, suggests the columns, and does nothing until ticked', async () => {
@@ -172,8 +185,8 @@ test('the Add data window always offers the cell site sample, even with data on 
   assert.deepEqual(page.errors, []);
 });
 
-test('the Add data window shows no cell site sample unless the feature is on', async () => {
-  const page = await openApp(browser, server);
+test('the Add data window shows no cell site sample when the feature is off', async () => {
+  const page = await openApp(browser, server, { query: '?cellsites=0' });
   await page.click('#btn-add');
   assert.equal(await page.locator('#btn-sample-cell-dlg').isVisible(), false);
 });

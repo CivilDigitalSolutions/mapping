@@ -57,19 +57,18 @@ export const DEFAULT_VIEW = { center: [20, 0], zoom: 2 };
 // Leave it empty ('') to turn counting off.
 export const GOATCOUNTER_CODE = 'civildigital';
 
-// Features still being previewed. They are OFF unless someone switches them on, so nothing
-// changes for anyone else. To try one, open the app with ?cellsites=1 on the end of the
-// address (the browser remembers it); open it with ?cellsites=0 to switch it off again.
-// When a feature is ready for everyone, change its value here to true.
-export const FEATURE_DEFAULTS = { cellSites: false };
+// Features that can be switched on or off. Add ?cellsites=0 to the address to hide cell sites in
+// this browser (it remembers), and ?cellsites=1 to show it again. To change it for everyone,
+// change the value in FEATURE_DEFAULTS.
+export const FEATURE_DEFAULTS = { cellSites: true };
 
 function featureOn(name, param) {
   try {
     const q = new URLSearchParams(location.search).get(param);
     const key = `data-mapper-feature-${param}`;
-    if (q === '1') localStorage.setItem(key, '1');
-    else if (q === '0') localStorage.removeItem(key);
-    return FEATURE_DEFAULTS[name] || localStorage.getItem(key) === '1';
+    if (q === '1' || q === '0') localStorage.setItem(key, q);
+    const saved = localStorage.getItem(key);
+    return saved === '1' ? true : saved === '0' ? false : FEATURE_DEFAULTS[name];
   } catch {
     return FEATURE_DEFAULTS[name]; // storage blocked: use the default
   }

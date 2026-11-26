@@ -32,17 +32,16 @@ A progressive web app (PWA) for putting coordinate data on a map. Upload CSV fil
 - **Works offline** once installed. Map tiles you've already viewed are cached.
 - **Accessible:** keyboard operable (Tab between markers, Enter opens one), screen-reader labels and announcements, visible focus, shapes as well as colours to tell datasets apart, dark mode, reduced-motion support and a mobile layout.
 
-## Cell sites (preview)
+## Cell sites
 
 Draws mobile mast coverage as sectors: each row's **azimuth** (the direction the antenna faces, in degrees clockwise from north), **beamwidth** (how wide it spreads; 360 is a full circle) and **radius** (how far it reaches).
 
-It is a preview feature and is **off for everyone by default**, so nothing changes in the app until it is switched on and nothing is published to visitors by merging it.
+It never appears on a map by itself: each dataset has to be opted in, by ticking the cell sites box when adding data (or later in its Style dialog).
 
-- **Try it:** open the app with `?cellsites=1` on the end of the address (for example `http://localhost:8080/?cellsites=1`). The browser remembers it; `?cellsites=0` switches it off again.
+- **Switch:** it is on for everyone (`FEATURE_DEFAULTS.cellSites` in `js/config.js`). Open the app with `?cellsites=0` on the end of the address to hide it in your browser (it remembers), or `?cellsites=1` to show it again. Set the default to `false` to take it off for everyone.
 - **On import:** the *Check your data* screen asks whether the data contains cell site information. The box is never ticked for you; if the column names look right it says so and has already picked the columns. Ticking it lets you choose the azimuth, beamwidth and radius columns, plus a default beamwidth and radius (and the radius unit) for rows that leave them blank.
 - **Afterwards:** a dataset's **Style** dialog has the same controls, so existing data can be switched on or off later.
-- **Sample:** *Try cell site sample* in the Datasets panel, or *Download cell site sample CSV* under Help. It is separate from the ordinary sample data.
-- **Going live:** set `FEATURE_DEFAULTS.cellSites` to `true` in `js/config.js`.
+- **Sample:** *Try the cell site sample* in the Add data window (always there), the Datasets panel when it is empty, or *Download cell site sample CSV* under Help. It is separate from the ordinary sample data.
 - **Exports:** sectors are included in all three.
   - *PDF report:* drawn on the map page (which is framed to fit whole sectors), with a sector shape in the legend and a **Cell sites** table on the summary page (sectors drawn, rows with no azimuth, beamwidth and radius ranges).
   - *Video:* drawn under the moving routes in every frame, including when the cell site data is itself the dataset being replayed. A video still needs some data with dates and times, so cell site data on its own can't make one.
