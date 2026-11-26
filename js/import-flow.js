@@ -4,11 +4,14 @@
 // and the built-in sample data.
 
 import { trackEvent } from './analytics.js';
+import { CELL_DEFAULTS, guessCellColumns } from './cellsites.js';
+import { renderCellControls } from './cellsites-ui.js';
+import { FEATURES } from './config.js';
 import { deviceTimeZone, formatDateTime, isValidTimeZone } from './dates.js';
 import { PALETTE } from './icons.js';
 import { detectFormat, geojsonToPoints, gpxToPoints, guessMapping, kmlToPoints, parseTable, tableToPoints } from './importers.js';
 import { looksLikeProjectText } from './project.js';
-import { SAMPLES } from './samples.js';
+import { CELL_SAMPLE, SAMPLES } from './samples.js';
 import { addDataset, fitAll } from './mapview.js';
 import { openProjectText } from './project-ui.js';
 import { SHAPE_ORDER, datasets, defaultStyle, prefs, savePrefs } from './state.js';
@@ -124,8 +127,34 @@ export function configureItem(item) {
   pending.style = defaultStyle(n, hasTimes);
   renderStyleControls($('#imp-style'), pending.style, () => {}, 'imp', pending.result.points);
   fillSplitSelect();
+  setupCellSites();
   $('#imp-name').focus();
   $('#imp-name').select();
+}
+
+/**
+ * The "Cell sites" question on the import screen. It is only offered when the preview
+ * is switched on, and the answer is always "no" until the user ticks the box. If the
+ * column names look like cell site data we say so, to encourage them to try it.
+ */
+export function setupCellSites() {
+  const group = $('#imp-cell-group');
+  group.hidden = !FEATURES.cellSites;
+  pending.cellCtl = null;
+  if (!FEATURES.cellSites) return;
+  const { points } = pending.result;
+  const columns = pending.format === 'table' ? pending.table.headers.filter((_, i) => ![pending.map.lat, pending.map.lon, pending.map.coords].includes(i)) : [];
+  if (pending.format !== 'table') {
+    for (const p of points.slice(0, 500)) for (const k of Object.keys(p.props || {})) if (!columns.includes(k)) columns.push(k);
+  }
+  if (!columns.length) { group.hidden = true; return; }
+  const sample = (c) => points.slice(0, 200).map((p) => p.props?.[c]);
+  const guess = guessCellColumns(columns, sample);
+  $('#imp-cell-prompt').innerHTML = guess.az
+    ? `<strong>This looks like it could be cell site data.</strong> We found an azimuth column (“${esc(guess.az)}”). Tick the box below to draw each antenna's coverage on the map.`
+    : "Does this data contain cell site (mast) information? If it does, tick the box below and choose the columns that hold the azimuth, beamwidth and radius.";
+  // Never switched on for the user: they choose
+  pending.cellCtl = renderCellControls($('#imp-cell'), 'imp', columns, { ...CELL_DEFAULTS, ...guess, on: false }, () => {}, points);
 }
 
 export function fillMappingControls() {
@@ -188,6 +217,7 @@ export function recompute() {
     pending.result = pending.parseGeo(importZone());
   }
   updateZoneHint();
+  pending.cellCtl?.refresh(pending.result.points);
   if (pending.style) {
     // Columns available for colouring can change with the column choices
     renderStyleControls($('#imp-style'), pending.style, () => {}, 'imp', pending.result.points);
@@ -331,6 +361,8 @@ $('#btn-import-go').addEventListener('click', () => {
     createdAt: Date.now(),
     timeZone: importZone(),
   };
+  const cell = pending.cellCtl?.get();
+  if (cell?.on && cell.az) { ds.cell = cell; trackEvent('import-cell-sites'); }
   prefs.lastImportTz = $('#imp-tz').value ? importZone() : '';
   savePrefs();
   const splitKey = $('#imp-split-field').hidden ? '' : $('#imp-split').value;
@@ -412,17 +444,27 @@ document.addEventListener('paste', (e) => {
   startQueue([{ name: 'Pasted data', text }]);
 });
 
+function addSample(s, k) {
+  const table = parseTable(s.text);
+  const timeZone = s.timeZone || deviceTimeZone();
+  const res = tableToPoints(table, { ...guessMapping(table), timeZone });
+  const style = { ...defaultStyle(datasets.length, res.points.some((p) => p.t != null)), ...s.style };
+  addDataset({ id: uid(), name: s.name, visible: true, style, points: res.points, skipped: res.skipped, source: 'Sample', createdAt: Date.now() + k, timeZone, ...(s.cell ? { cell: { ...s.cell } } : {}) });
+}
+
 export function loadSamples() {
-  SAMPLES.forEach((s, k) => {
-    const table = parseTable(s.text);
-    const timeZone = s.timeZone || deviceTimeZone();
-    const res = tableToPoints(table, { ...guessMapping(table), timeZone });
-    const style = { ...defaultStyle(datasets.length, res.points.some((p) => p.t != null)), ...s.style };
-    addDataset({ id: uid(), name: s.name, visible: true, style, points: res.points, skipped: res.skipped, source: 'Sample', createdAt: Date.now() + k, timeZone });
-  });
+  SAMPLES.forEach(addSample);
   fitAll();
   announce('Sample data added');
   trackEvent('sample-data');
+}
+
+/** The cell site sample is separate from the others, so it never appears unless asked for. */
+export function loadCellSample() {
+  addSample(CELL_SAMPLE, 0);
+  fitAll();
+  announce('Cell site sample data added');
+  trackEvent('sample-cell-sites');
 }
 
 // Files opened via the OS "Open with" / share target (installed PWA)

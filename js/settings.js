@@ -1,5 +1,8 @@
 // A dataset's Style dialog: name, time zone correction and style.
 
+import { CELL_DEFAULTS, guessCellColumns } from './cellsites.js';
+import { renderCellControls } from './cellsites-ui.js';
+import { FEATURES } from './config.js';
 import { deviceTimeZone, shiftTimes } from './dates.js';
 import { renderDataset, replay } from './mapview.js';
 import { changed, save } from './state.js';
@@ -37,6 +40,25 @@ export function openSettings(ds) {
     cancelAnimationFrame(frame);
     frame = requestAnimationFrame(() => { renderDataset(ds); replay.refresh(); save(); });
   }, 'set', ds.points);
+  openCellSettings(ds, () => {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => { renderDataset(ds); changed(); save(); });
+  });
   dlg.onclose = () => { renderDataset(ds); changed(); save(); };
   dlg.showModal();
+}
+
+/** The Cell sites section of the Style dialog (only when the preview is switched on). */
+function openCellSettings(ds, redraw) {
+  const group = $('#set-cell-group');
+  const columns = [];
+  for (const p of ds.points.slice(0, 2000)) for (const k of Object.keys(p.props || {})) if (!columns.includes(k)) columns.push(k);
+  group.hidden = !FEATURES.cellSites || !columns.length;
+  if (group.hidden) return;
+  // A dataset that was never set up as cell site data starts with our best guess, switched off
+  const start = ds.cell || { ...CELL_DEFAULTS, ...guessCellColumns(columns, (c) => ds.points.slice(0, 200).map((p) => p.props?.[c])) };
+  renderCellControls($('#set-cell'), 'set', columns, start, (cell) => {
+    if (cell.on || ds.cell) ds.cell = cell;
+    redraw();
+  }, ds.points);
 }

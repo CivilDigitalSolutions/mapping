@@ -32,6 +32,19 @@ A progressive web app (PWA) for putting coordinate data on a map. Upload CSV fil
 - **Works offline** once installed. Map tiles you've already viewed are cached.
 - **Accessible:** keyboard operable (Tab between markers, Enter opens one), screen-reader labels and announcements, visible focus, shapes as well as colours to tell datasets apart, dark mode, reduced-motion support and a mobile layout.
 
+## Cell sites (preview)
+
+Draws mobile mast coverage as sectors: each row's **azimuth** (the direction the antenna faces, in degrees clockwise from north), **beamwidth** (how wide it spreads; 360 is a full circle) and **radius** (how far it reaches).
+
+It is a preview feature and is **off for everyone by default**, so nothing changes in the app until it is switched on and nothing is published to visitors by merging it.
+
+- **Try it:** open the app with `?cellsites=1` on the end of the address (for example `http://localhost:8080/?cellsites=1`). The browser remembers it; `?cellsites=0` switches it off again.
+- **On import:** the *Check your data* screen asks whether the data contains cell site information. The box is never ticked for you; if the column names look right it says so and has already picked the columns. Ticking it lets you choose the azimuth, beamwidth and radius columns, plus a default beamwidth and radius (and the radius unit) for rows that leave them blank.
+- **Afterwards:** a dataset's **Style** dialog has the same controls, so existing data can be switched on or off later.
+- **Sample:** *Try cell site sample* in the Datasets panel, or *Download cell site sample CSV* under Help. It is separate from the ordinary sample data.
+- **Going live:** set `FEATURE_DEFAULTS.cellSites` to `true` in `js/config.js`.
+- Not yet included: sectors are not drawn in the PDF, video or interactive map exports.
+
 ## Running it
 
 It's a static site with no build step. Any web server works.
@@ -124,6 +137,8 @@ js/scalebar.js        Scale bar maths for exported maps
 js/capture.js         Draws the map onto a canvas for exports
 js/exporters.js       Video (fast WebCodecs MP4, or real-time fallback) and PDF report
 js/samples.js         Built-in sample datasets
+js/cellsites.js       Cell sites: guessing columns, sector shapes (no page code)
+js/cellsites-ui.js    Cell sites: the column pickers on the import screen and Style dialog
 js/store.js           IndexedDB persistence
 js/config.js          Map tile providers
 sw.js                 Service worker (offline + tile cache)

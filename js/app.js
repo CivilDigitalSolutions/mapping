@@ -3,13 +3,14 @@
 // project layout in README.md.
 
 import { initAnalytics, trackEvent } from './analytics.js';
-import { BASEMAPS } from './config.js';
+import { cleanCell } from './cellsites.js';
+import { BASEMAPS, FEATURES } from './config.js';
 import { deviceTimeZone, setDisplayTimeZone } from './dates.js';
-import { SAMPLES } from './samples.js';
+import { CELL_SAMPLE, SAMPLES } from './samples.js';
 import * as store from './store.js';
 import './export-ui.js'; // sets up the Export dialog (PDF / video / map file)
 import './nearby-ui.js'; // "Who was here?" in the Datasets panel
-import { loadSamples, openImport } from './import-flow.js';
+import { loadCellSample, loadSamples, openImport } from './import-flow.js';
 import { baseLayers, fitAll, map, renderAll, replay } from './mapview.js';
 import { panel, panelBtn, renderList, updateStorageStatus, updateStorageUsage } from './panel.js';
 import { saveProjectFile } from './project-ui.js';
@@ -33,6 +34,13 @@ $('#btn-sample').addEventListener('click', loadSamples);
 $('#btn-fit').addEventListener('click', fitAll);
 $('#btn-help').addEventListener('click', () => $('#dlg-help').showModal());
 $('#btn-replay').addEventListener('click', () => { if (replay.active) trackEvent('replay'); });
+if (FEATURES.cellSites) {
+  // Cell sites is a preview feature: its buttons only appear when it has been switched on
+  $('#btn-sample-cell').hidden = false;
+  $('#btn-sample-cell-csv').hidden = false;
+  $('#btn-sample-cell').addEventListener('click', loadCellSample);
+  $('#btn-sample-cell-csv').addEventListener('click', () => download('sample-cell-sites.csv', CELL_SAMPLE.text, 'text/csv'));
+}
 $('#btn-sample-csv').addEventListener('click', () => download('sample-track.csv', SAMPLES[0].text, 'text/csv'));
 
 // Load saved preferences and datasets
@@ -48,7 +56,10 @@ $('#btn-sample-csv').addEventListener('click', () => download('sample-track.csv'
   const saved = await store.get('datasets');
   if (Array.isArray(saved) && saved.length) {
     // Styles are checked again on loading, in case saved data was changed outside the app
-    saved.forEach((d, n) => { d.style = cleanStyle(d.style, defaultStyle(n, d.points?.some((p) => p.t != null))); });
+    saved.forEach((d, n) => {
+      d.style = cleanStyle(d.style, defaultStyle(n, d.points?.some((p) => p.t != null)));
+      if (d.cell) { const c = cleanCell(d.cell); if (c) d.cell = c; else delete d.cell; }
+    });
     datasets.push(...saved);
     renderAll();
     fitAll();

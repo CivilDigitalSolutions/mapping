@@ -41,3 +41,37 @@ Yard East,51°30'25"N,0°04'05"W,Yard
 Office,51°30'45"N,0°08'20"W,Office`,
   },
 ];
+
+// A cell site (mast) example for the cell sites preview. It is kept apart from SAMPLES so the
+// ordinary "Try sample data" button doesn't draw sectors over the other examples.
+// One row per antenna sector: Azimuth is the compass direction it faces (degrees clockwise
+// from north), Beamwidth how wide it spreads (360 = all-round) and Radius how far it reaches.
+// LDN007 has no beamwidth and LDN008 no radius, to show the defaults being used.
+export const CELL_SAMPLE = {
+  name: 'Sample: Cell sites (azimuth, beamwidth, radius)',
+  style: { shape: 'triangle', color: '#CC79A7', size: 18, showLine: false },
+  cell: { on: true, az: 'Azimuth', beam: 'Beamwidth', radius: 'Radius (m)', defaultBeam: 65, defaultRadius: 600, unit: 'm' },
+  text: `Site,Sector,Latitude,Longitude,Azimuth,Beamwidth,Radius (m),Technology
+LDN001 Westminster,A,51.50070,-0.12460,30,65,800,4G
+LDN001 Westminster,B,51.50070,-0.12460,150,65,800,4G
+LDN001 Westminster,C,51.50070,-0.12460,270,65,800,4G
+LDN002 Holborn,A,51.51740,-0.12000,0,60,600,5G
+LDN002 Holborn,B,51.51740,-0.12000,120,60,600,5G
+LDN002 Holborn,C,51.51740,-0.12000,240,60,600,5G
+LDN003 City,A,51.51360,-0.08900,45,65,700,4G
+LDN003 City,B,51.51360,-0.08900,165,65,700,4G
+LDN003 City,C,51.51360,-0.08900,285,65,700,4G
+LDN004 Southwark,A,51.50450,-0.08650,90,70,900,4G
+LDN004 Southwark,B,51.50450,-0.08650,210,70,900,4G
+LDN004 Southwark,C,51.50450,-0.08650,330,70,900,4G
+LDN005 Marylebone,A,51.52050,-0.15500,20,65,1000,5G
+LDN005 Marylebone,B,51.52050,-0.15500,140,65,1000,5G
+LDN005 Marylebone,C,51.52050,-0.15500,260,65,1000,5G
+LDN006 Waterloo (small cell),O,51.50310,-0.11320,0,360,300,5G
+LDN007 Mayfair,A,51.51100,-0.14400,60,,500,4G
+LDN007 Mayfair,B,51.51100,-0.14400,180,,500,4G
+LDN007 Mayfair,C,51.51100,-0.14400,300,,500,4G
+LDN008 Bermondsey,A,51.49800,-0.07800,15,65,,3G
+LDN008 Bermondsey,B,51.49800,-0.07800,135,65,,3G
+LDN008 Bermondsey,C,51.49800,-0.07800,255,65,,3G`,
+};

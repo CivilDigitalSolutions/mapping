@@ -34,12 +34,14 @@ export function renderList() {
     const meta = [l?.mask
       ? `${shown.toLocaleString()} of ${ds.points.length.toLocaleString()} points shown`
       : `${ds.points.length.toLocaleString()} point${ds.points.length === 1 ? '' : 's'}`];
+    if (l?.cell) meta.push(`${l.cell.count.toLocaleString()} cell sector${l.cell.count === 1 ? '' : 's'}`);
     if (range) meta.push(range.min === range.max ? formatDateTime(range.min) : `${formatDateTime(range.min)} – ${formatDateTime(range.max)}`);
     const events = summarise(l?.analysis, formatDuration);
     const warn = [];
     if (ds.style.showLine && ds.style.lineOrder === 'time' && l?.untimed.length) {
       warn.push(`${l.untimed.length} point${l.untimed.length === 1 ? ' has' : 's have'} no date/time, so ${l.untimed.length === 1 ? "it isn't" : "they aren't"} on the line.`);
     }
+    if (l?.cell?.capped) warn.push(`Only the first ${l.cell.count.toLocaleString()} cell sectors are drawn, to keep the map quick.`);
     if (ds.skipped?.length) warn.push(`${ds.skipped.length} row${ds.skipped.length === 1 ? ' was' : 's were'} skipped when importing.`);
 
     li.innerHTML = `

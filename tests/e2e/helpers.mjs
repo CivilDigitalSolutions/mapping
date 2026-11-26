@@ -48,7 +48,7 @@ function tileSvg(z, x, y) {
  * options: anything newContext() accepts, plus { initScript } to run before the app loads.
  * The page collects uncaught errors in page.errors.
  */
-export async function openApp(browser, server, { initScript, ...options } = {}) {
+export async function openApp(browser, server, { initScript, query = '', ...options } = {}) {
   // UK English and London time by default, so dates look the same on any machine running the tests
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: 'block', acceptDownloads: true, locale: 'en-GB', timezoneId: 'Europe/London', ...options });
   await ctx.route(/tile\.openstreetmap\.org\/(\d+)\/(\d+)\/(\d+)\.png/, (r) => {
@@ -61,7 +61,7 @@ export async function openApp(browser, server, { initScript, ...options } = {}) 
   page.errors = [];
   page.on('pageerror', (e) => page.errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) page.errors.push(m.text()); });
-  await page.goto(server.url);
+  await page.goto(server.url + query);
   await page.waitForFunction(() => document.querySelector('#storage-status')?.textContent.length > 0);
   return page;
 }

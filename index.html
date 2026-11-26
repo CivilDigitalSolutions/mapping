@@ -176,6 +176,7 @@
         <p>Upload a CSV file or paste rows of latitude and longitude, with dates and times if you have them.</p>
         <button type="button" class="btn btn-primary" id="btn-add-empty">Add data</button>
         <button type="button" class="btn btn-link" id="btn-sample">Try sample data</button>
+        <button type="button" class="btn btn-link" id="btn-sample-cell" hidden>Try cell site sample <span class="badge-preview">Preview</span></button>
       </div>
       <ul id="dataset-list" class="dataset-list" aria-label="Loaded datasets"></ul>
 
@@ -360,6 +361,12 @@
           </table>
         </div>
 
+        <fieldset class="group" id="imp-cell-group" hidden>
+          <legend>Cell sites <span class="badge-preview">Preview</span></legend>
+          <p class="hint" id="imp-cell-prompt">Does this data contain cell site (mast) information? If it does, you can draw each antenna's coverage on the map.</p>
+          <div id="imp-cell"></div>
+        </fieldset>
+
         <fieldset class="group">
           <legend>Marker style</legend>
           <div id="imp-style"></div>
@@ -393,6 +400,10 @@
           <p class="hint">Change this if the times look hours out. Times that already said which time zone they were in won't change.</p>
         </div>
         <div id="set-style"></div>
+        <fieldset class="group" id="set-cell-group" hidden>
+          <legend>Cell sites <span class="badge-preview">Preview</span></legend>
+          <div id="set-cell"></div>
+        </fieldset>
       </div>
       <footer class="dialog-foot">
         <button type="submit" class="btn btn-primary" value="done">Done</button>
@@ -531,6 +542,7 @@
       </div>
       <footer class="dialog-foot">
         <button type="button" class="btn" id="btn-sample-csv">Download sample CSV</button>
+        <button type="button" class="btn" id="btn-sample-cell-csv" hidden>Download cell site sample CSV</button>
         <button type="submit" class="btn btn-primary">Got it</button>
       </footer>
     </form>

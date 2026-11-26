@@ -1,6 +1,7 @@
 // Project files: everything in the app (datasets, styles and time zones) in one
 // JSON file that people can keep as a backup or open on another computer.
 
+import { cleanCell } from './cellsites.js';
 import { isValidTimeZone } from './dates.js';
 import { SHAPE_KEYS } from './icons.js';
 
@@ -96,6 +97,7 @@ export function readProject(json, defaultStyle) {
       source: typeof d.source === 'string' ? d.source : 'Project file',
       createdAt: Number(d.createdAt) || Date.now(),
       ...(typeof d.timeZone === 'string' && isValidTimeZone(d.timeZone) ? { timeZone: d.timeZone } : {}),
+      ...(cleanCell(d.cell) ? { cell: cleanCell(d.cell) } : {}),
     };
   });
   return { datasets, dropped, displayTimeZone: typeof json.displayTimeZone === 'string' ? json.displayTimeZone : null };
